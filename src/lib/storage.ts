@@ -1,10 +1,10 @@
 /**
- * localStorage ラッパー。単一キー "cockpato:data:v1" に AppData を JSON で保存。
+ * localStorage ラッパー。単一キー "cookpato:data:v1" に AppData を JSON で保存。
  * 読み書きエラーは黙って初期値を返す（単一ユーザー・シンプル運用のため）。
  */
 import type { AppData } from "../types";
 
-const STORAGE_KEY = "cockpato:data:v1";
+const STORAGE_KEY = "cookpato:data:v1";
 
 function initialData(): AppData {
   return {

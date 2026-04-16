@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import emptyDayImg from "../assets/empty-day.png";
+import favoriteImg from "../assets/favorite.png";
 import { formatDayLabel, isSaturday, isSunday } from "../lib/date";
 import type { DateKey, DayMeals } from "../types";
 
@@ -8,9 +10,17 @@ type Props = {
   isToday: boolean;
   onTextChange: (text: string) => void;
   onToggleLine: (lineIndex: number) => void;
+  onToggleFavorite: (lineIndex: number) => void;
 };
 
-export function DayRow({ dateKey, day, isToday, onTextChange, onToggleLine }: Props) {
+export function DayRow({
+  dateKey,
+  day,
+  isToday,
+  onTextChange,
+  onToggleLine,
+  onToggleFavorite,
+}: Props) {
   const [editing, setEditing] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const lines = day?.lines ?? [];
@@ -33,6 +43,7 @@ export function DayRow({ dateKey, day, isToday, onTextChange, onToggleLine }: Pr
       : "text-neutral-700";
 
   const bgClass = isToday ? "bg-yellow-50" : "bg-white";
+  const isEmptyDay = lines.length === 0 || (lines.length === 1 && lines[0]?.text === "");
 
   return (
     <div className={`flex gap-3 px-3 py-2 border-b border-neutral-100 ${bgClass}`}>
@@ -61,8 +72,18 @@ export function DayRow({ dateKey, day, isToday, onTextChange, onToggleLine }: Pr
             className="w-full text-left min-h-11 py-1"
             aria-label={`${formatDayLabel(dateKey)} の献立を編集`}
           >
-            {lines.length === 0 || (lines.length === 1 && lines[0]?.text === "") ? (
-              <span className="text-neutral-300 text-base">＋</span>
+            {isEmptyDay ? (
+              <span className="flex items-center gap-2">
+                <span className="text-neutral-300 text-base">＋</span>
+                {isToday && (
+                  <img
+                    src={emptyDayImg}
+                    alt=""
+                    aria-hidden="true"
+                    className="w-10 h-10 opacity-80"
+                  />
+                )}
+              </span>
             ) : (
               <ul>
                 {lines.map((line, idx) =>
@@ -72,9 +93,14 @@ export function DayRow({ dateKey, day, isToday, onTextChange, onToggleLine }: Pr
                       key={`${dateKey}-${idx}`}
                       text={line.text}
                       done={line.done}
+                      favorite={line.favorite ?? false}
                       onToggle={(e) => {
                         e.stopPropagation();
                         onToggleLine(idx);
+                      }}
+                      onToggleFavorite={(e) => {
+                        e.stopPropagation();
+                        onToggleFavorite(idx);
                       }}
                     />
                   ),
@@ -91,10 +117,12 @@ export function DayRow({ dateKey, day, isToday, onTextChange, onToggleLine }: Pr
 type LineItemProps = {
   text: string;
   done: boolean;
+  favorite: boolean;
   onToggle: (e: React.MouseEvent) => void;
+  onToggleFavorite: (e: React.MouseEvent) => void;
 };
 
-function LineItem({ text, done, onToggle }: LineItemProps) {
+function LineItem({ text, done, favorite, onToggle, onToggleFavorite }: LineItemProps) {
   return (
     <li className="flex items-start gap-2 py-0.5">
       <button
@@ -113,12 +141,25 @@ function LineItem({ text, done, onToggle }: LineItemProps) {
         </span>
       </button>
       <span
-        className={`pt-2 text-base leading-7 break-words ${
+        className={`flex-1 pt-2 text-base leading-7 break-words ${
           done ? "line-through text-neutral-400" : "text-neutral-800"
         }`}
       >
         {text}
       </span>
+      <button
+        type="button"
+        onClick={onToggleFavorite}
+        className="w-11 h-11 -my-2 -mr-1 flex items-center justify-center shrink-0"
+        aria-label={favorite ? "お気に入り解除" : "お気に入りに追加"}
+        aria-pressed={favorite}
+      >
+        {favorite ? (
+          <img src={favoriteImg} alt="" aria-hidden="true" className="w-6 h-6" />
+        ) : (
+          <span className="w-5 h-5 text-neutral-300 text-base leading-none">♡</span>
+        )}
+      </button>
     </li>
   );
 }

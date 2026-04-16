@@ -1,8 +1,8 @@
-# DELIVERY — Cockpato 初回実装
+# DELIVERY — Cookpato 初回実装
 
 ## 概要
 
-妻用の献立メモアプリ「Cockpato」の初回実装を完了した。
+妻用の献立メモアプリ「Cookpato」の初回実装を完了した。
 iPhone 11 / iOS Safari でホーム画面追加して使う、完全ローカル動作の PWA。
 
 - 仕様: `INDEX.md` → `SPEC.md` / `DONT.md`
@@ -15,10 +15,11 @@ iPhone 11 / iOS Safari でホーム画面追加して使う、完全ローカル
 | カレンダー（無限スクロール） | `src/components/Calendar.tsx` | ✅ |
 | フリー入力（1行1品） | `src/components/DayRow.tsx` | ✅ |
 | 完了トグル（品単位） | `src/components/DayRow.tsx` の `LineItem` | ✅ |
+| お気に入りマーカー（品単位） | `src/components/DayRow.tsx` の `LineItem` + `src/hooks/useAppData.ts` の `toggleFavorite` | ✅ |
 | 過去履歴検索（類似一致） | `src/hooks/useSearch.ts` + `src/components/SearchBar.tsx` + `SearchResults.tsx` | ✅ |
 | ストックリスト | `src/components/StockList.tsx` | ✅ |
-| 完全ローカル保存 | `src/lib/storage.ts`（`localStorage` キー `cockpato:data:v1`） | ✅ |
-| PWA（ホーム画面追加） | `vite.config.ts` + `vite-plugin-pwa` + `public/favicon.svg` | ✅ |
+| 完全ローカル保存 | `src/lib/storage.ts`（`localStorage` キー `cookpato:data:v1`） | ✅ |
+| PWA（ホーム画面追加） | `vite.config.ts` + `vite-plugin-pwa` + `public/{favicon.svg,favicon-32x32.png,apple-touch-icon.png,pwa-192x192.png,pwa-512x512.png,pwa-maskable-512.png}` | ✅ |
 
 ### ディレクトリ構成
 
@@ -68,13 +69,13 @@ src/
 | `npm run typecheck` | ✅ エラーなし |
 | `npm run lint` (Biome) | ✅ エラー・警告なし（`DayRow.tsx` のキー配列の1箇所のみ、SPEC 準拠で `biome-ignore` 明示コメント付き） |
 | `npm run format:check` | ✅ 整形済み |
-| `npm run test` (Vitest) | ✅ 27/27 passed（4ファイル） |
-| `npm run build` | ✅ 成功（dist 178.96 kB JS / gzip 57.65 kB、PWA SW生成済み） |
+| `npm run test` (Vitest) | ✅ 33/33 passed（4ファイル） |
+| `npm run build` | ✅ 成功（dist 185.29 kB JS / gzip 62.34 kB、PWA SW生成済み） |
 
 テスト内訳：
 - `tests/date.test.ts` — 日付ユーティリティ 7件
 - `tests/normalize.test.ts` — 正規化・部分一致・カナ共通部分 9件
-- `tests/useAppData.test.tsx` — メモ保存・完了トグル・ストック CRUD 6件
+- `tests/useAppData.test.tsx` — メモ保存・完了トグル・ストック CRUD・お気に入り（toggle / 完了との独立 / 編集維持 / リセット / 既存 v1 互換）12件
 - `tests/useSearch.test.tsx` — 完全一致＋類似（「豚バラ」⇄「ブタバラ」等）5件
 
 ### 推論センサー（`sensors/inferential.md`）
@@ -128,7 +129,7 @@ Vitest 2.x が内部に Vite 5 の型を bundle しているため、
 ## 動作確認手順（レビュー用）
 
 ```bash
-cd cockpato
+cd cookpato
 npm install
 npm run dev   # http://localhost:5173 で開く
 ```
@@ -153,8 +154,11 @@ npm run dev   # http://localhost:5173 で開く
 
 ## 未実装（意図的スキップ・次回以降）
 
-- App アイコンの pixel PNG（現状 `favicon.svg` のみ）：ホーム画面でのアイコンは SVG でも出るが、iOS によっては PNG 版の `apple-touch-icon` を用意した方が鮮明。要望が出たら追加する。
 - 実機 iPhone 11 での動作確認：開発環境で手動 E2E は未実施。妻が実際に使ってのフィードバックを次回 Layer 0 レビュー時に反映する。
+
+## 解消済み（前回 DELIVERY 時点の未実装事項）
+
+- App アイコンの PNG：シマエナガ素材から `scripts/generate-images.mjs`（sharp）で `apple-touch-icon.png` / `favicon-32x32.png` / `pwa-192x192.png` / `pwa-512x512.png` / `pwa-maskable-512.png` を生成し `vite.config.ts` の manifest に登録済み。素材は `assets/`、生成は `npm run images` で再現可能。空状態（今日の空欄・検索ヒット 0 件・ストック 0 件）にも `src/assets/empty-*.png` を表示。
 
 ## 次の Layer 0 レビューに献上する観察
 

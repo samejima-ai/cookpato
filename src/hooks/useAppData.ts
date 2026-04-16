@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { generateId } from "../lib/id";
 import { loadData, saveData } from "../lib/storage";
-import type { AppData, DateKey, DayMeals } from "../types";
+import type { AppData, DateKey, DayMeals, MealLine } from "../types";
 
 export type AppDataApi = {
   data: AppData;
@@ -13,6 +13,8 @@ export type AppDataApi = {
   setMealsText: (date: DateKey, text: string) => void;
   /** 1日分の完了トグル（行インデックス単位） */
   toggleLine: (date: DateKey, lineIndex: number) => void;
+  /** お気に入りトグル（行インデックス単位） */
+  toggleFavorite: (date: DateKey, lineIndex: number) => void;
   /** ストック追加 */
   addStock: (text: string) => void;
   /** ストック削除 */
@@ -27,9 +29,13 @@ function textToLines(text: string, previous: DayMeals | undefined): DayMeals {
   const prevLines = previous?.lines ?? [];
   const lines = rawLines.map((raw, i) => {
     const prev = prevLines[i];
-    // 行の内容が前回と同一なら完了状態を維持。それ以外はfalseにリセット。
-    const done = prev && prev.text === raw ? prev.done : false;
-    return { text: raw, done };
+    // 行の内容が前回と同一なら完了状態とお気に入りを維持。それ以外は初期値にリセット。
+    const sameText = prev && prev.text === raw;
+    const done = sameText ? prev.done : false;
+    const favorite = sameText ? prev.favorite : undefined;
+    const line: MealLine = { text: raw, done };
+    if (favorite) line.favorite = true;
+    return line;
   });
   return { lines };
 }
@@ -45,8 +51,8 @@ export function useAppData(): AppDataApi {
   const setMealsText = useCallback((date: DateKey, text: string) => {
     setData((prev) => {
       const nextDay = textToLines(text, prev.meals[date]);
-      // 全行が空文字かつ完了状態も初期なら、meals から削除して肥大化防止
-      const isEmpty = nextDay.lines.every((l) => l.text === "" && !l.done);
+      // 全行が空文字かつ完了・お気に入りも未付与なら、meals から削除して肥大化防止
+      const isEmpty = nextDay.lines.every((l) => l.text === "" && !l.done && !l.favorite);
       const nextMeals = { ...prev.meals };
       if (isEmpty) {
         delete nextMeals[date];
@@ -73,6 +79,26 @@ export function useAppData(): AppDataApi {
     });
   }, []);
 
+  const toggleFavorite = useCallback((date: DateKey, lineIndex: number) => {
+    setData((prev) => {
+      const day = prev.meals[date];
+      if (!day) return prev;
+      const targetLine = day.lines[lineIndex];
+      if (!targetLine) return prev;
+      const nextLines = day.lines.map((line, i): MealLine => {
+        if (i !== lineIndex) return line;
+        const nextFavorite = !line.favorite;
+        const next: MealLine = { text: line.text, done: line.done };
+        if (nextFavorite) next.favorite = true;
+        return next;
+      });
+      return {
+        ...prev,
+        meals: { ...prev.meals, [date]: { lines: nextLines } },
+      };
+    });
+  }, []);
+
   const addStock = useCallback((text: string) => {
     const trimmed = text.trim();
     if (trimmed === "") return;
@@ -89,5 +115,5 @@ export function useAppData(): AppDataApi {
     }));
   }, []);
 
-  return { data, setMealsText, toggleLine, addStock, removeStock };
+  return { data, setMealsText, toggleLine, toggleFavorite, addStock, removeStock };
 }

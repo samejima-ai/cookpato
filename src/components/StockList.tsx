@@ -1,4 +1,5 @@
 import { useState } from "react";
+import emptyStockImg from "../assets/empty-stock.png";
 import type { AppDataApi } from "../hooks/useAppData";
 
 type Props = {
@@ -28,6 +29,12 @@ export function StockList({ api }: Props) {
       </button>
       {expanded && (
         <div className="px-3 pb-3 max-h-48 overflow-y-auto">
+          {api.data.stock.length === 0 && (
+            <div className="flex flex-col items-center py-3 text-neutral-400">
+              <img src={emptyStockImg} alt="" aria-hidden="true" className="w-20 h-20 opacity-90" />
+              <span className="text-xs mt-1">まだストックはありません</span>
+            </div>
+          )}
           <ul className="space-y-1 mb-2">
             {api.data.stock.map((item) => (
               <li

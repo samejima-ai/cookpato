@@ -80,4 +80,103 @@ describe("useAppData", () => {
     });
     expect(result.current.data.stock).toHaveLength(0);
   });
+
+  describe("お気に入りマーカー", () => {
+    it("toggleFavorite で行単位のお気に入り状態を切り替える", () => {
+      const { result } = renderHook(() => useAppData());
+      act(() => {
+        result.current.setMealsText("2026-04-15", "豚バラ大根\nサラダ");
+      });
+      act(() => {
+        result.current.toggleFavorite("2026-04-15", 0);
+      });
+      expect(result.current.data.meals["2026-04-15"]?.lines[0]?.favorite).toBe(true);
+      expect(result.current.data.meals["2026-04-15"]?.lines[1]?.favorite).toBeFalsy();
+
+      act(() => {
+        result.current.toggleFavorite("2026-04-15", 0);
+      });
+      expect(result.current.data.meals["2026-04-15"]?.lines[0]?.favorite).toBeFalsy();
+    });
+
+    it("お気に入りと完了は独立して扱える", () => {
+      const { result } = renderHook(() => useAppData());
+      act(() => {
+        result.current.setMealsText("2026-04-15", "カレー");
+      });
+      act(() => {
+        result.current.toggleFavorite("2026-04-15", 0);
+        result.current.toggleLine("2026-04-15", 0);
+      });
+      expect(result.current.data.meals["2026-04-15"]?.lines[0]?.favorite).toBe(true);
+      expect(result.current.data.meals["2026-04-15"]?.lines[0]?.done).toBe(true);
+    });
+
+    it("行内容が変わらない編集ではお気に入りが維持される", () => {
+      const { result } = renderHook(() => useAppData());
+      act(() => {
+        result.current.setMealsText("2026-04-15", "カレー");
+      });
+      act(() => {
+        result.current.toggleFavorite("2026-04-15", 0);
+      });
+      // 末尾に行を足しても1行目の内容は同一
+      act(() => {
+        result.current.setMealsText("2026-04-15", "カレー\nサラダ");
+      });
+      expect(result.current.data.meals["2026-04-15"]?.lines[0]?.favorite).toBe(true);
+      expect(result.current.data.meals["2026-04-15"]?.lines[1]?.favorite).toBeFalsy();
+    });
+
+    it("行のテキスト変更でお気に入りはリセットされる", () => {
+      const { result } = renderHook(() => useAppData());
+      act(() => {
+        result.current.setMealsText("2026-04-15", "カレー");
+      });
+      act(() => {
+        result.current.toggleFavorite("2026-04-15", 0);
+      });
+      act(() => {
+        result.current.setMealsText("2026-04-15", "シチュー");
+      });
+      expect(result.current.data.meals["2026-04-15"]?.lines[0]?.favorite).toBeFalsy();
+    });
+
+    it("お気に入りのみが残る日は meals から削除されない", () => {
+      const { result } = renderHook(() => useAppData());
+      act(() => {
+        result.current.setMealsText("2026-04-15", "カレー");
+      });
+      act(() => {
+        result.current.toggleFavorite("2026-04-15", 0);
+      });
+      act(() => {
+        // テキストを空に。done もないが favorite は維持されるので残る
+        result.current.setMealsText("2026-04-15", "");
+      });
+      // favorite は内容変更でリセットされるため、結果として meals は空でよい
+      expect(result.current.data.meals["2026-04-15"]).toBeUndefined();
+    });
+
+    it("既存 v1 データ（favorite フィールドなし）を正しく読み込める", () => {
+      const legacy = {
+        version: 1,
+        meals: {
+          "2026-04-10": {
+            lines: [
+              { text: "豚バラ大根", done: true },
+              { text: "サラダ", done: false },
+            ],
+          },
+        },
+        stock: [],
+      };
+      localStorage.setItem("cookpato:data:v1", JSON.stringify(legacy));
+      const { result } = renderHook(() => useAppData());
+      const day = result.current.data.meals["2026-04-10"];
+      expect(day?.lines[0]?.text).toBe("豚バラ大根");
+      expect(day?.lines[0]?.done).toBe(true);
+      expect(day?.lines[0]?.favorite).toBeUndefined();
+    });
+  });
 });

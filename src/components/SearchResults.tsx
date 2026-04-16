@@ -1,3 +1,4 @@
+import emptySearchImg from "../assets/empty-search.png";
 import { formatDayLabel } from "../lib/date";
 import type { SearchHit } from "../types";
 
@@ -12,8 +13,14 @@ export function SearchResults({ hits, query, onPick }: Props) {
   return (
     <div className="absolute inset-x-0 top-full bg-white border-b border-neutral-200 shadow-md max-h-[70vh] overflow-y-auto z-20">
       {hits.length === 0 ? (
-        <div className="px-4 py-6 text-center text-neutral-400 text-sm">
-          一致する履歴はありません
+        <div className="px-4 py-6 text-center text-neutral-400 text-sm flex flex-col items-center">
+          <img
+            src={emptySearchImg}
+            alt=""
+            aria-hidden="true"
+            className="w-32 h-32 opacity-90 mb-2"
+          />
+          <span>一致する履歴はありません</span>
         </div>
       ) : (
         <ul>

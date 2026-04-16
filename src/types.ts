@@ -1,5 +1,5 @@
 /**
- * Cockpato のドメイン型定義。
+ * Cookpato のドメイン型定義。
  * 全ての型はここに集約する（検索容易性・重複防止のため）。
  */
 
@@ -12,6 +12,8 @@ export type MealLine = {
   text: string;
   /** 完了済みか */
   done: boolean;
+  /** お気に入りマーカー（任意・既存データ互換のためオプショナル） */
+  favorite?: boolean;
 };
 
 /** 1日分の献立 */

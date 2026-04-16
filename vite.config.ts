@@ -7,10 +7,17 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: "autoUpdate",
-      includeAssets: ["favicon.svg", "apple-touch-icon.png"],
+      includeAssets: [
+        "favicon.svg",
+        "favicon-32x32.png",
+        "apple-touch-icon.png",
+        "pwa-192x192.png",
+        "pwa-512x512.png",
+        "pwa-maskable-512.png",
+      ],
       manifest: {
-        name: "Cockpato",
-        short_name: "Cockpato",
+        name: "Cookpato",
+        short_name: "Cookpato",
         description: "献立メモ",
         theme_color: "#ffffff",
         background_color: "#ffffff",
@@ -30,10 +37,10 @@ export default defineConfig({
             type: "image/png",
           },
           {
-            src: "pwa-512x512.png",
+            src: "pwa-maskable-512.png",
             sizes: "512x512",
             type: "image/png",
-            purpose: "any maskable",
+            purpose: "maskable",
           },
         ],
       },
