@@ -34,6 +34,9 @@ export function Calendar({ api, scrollTarget }: Props) {
     [api.data.meals, today],
   );
 
+  // お気に入りは正規化テキスト集合として保持されているので Set に変換して渡す
+  const favoriteKeys = useMemo(() => new Set(api.data.favorites), [api.data.favorites]);
+
   // 初期スクロール：当日を画面中央へ
   useEffect(() => {
     if (didInitialScroll.current) return;
@@ -137,6 +140,7 @@ export function Calendar({ api, scrollTarget }: Props) {
                 day={api.data.meals[date]}
                 isToday={date === today}
                 showCheer={cheerDates.has(date)}
+                favoriteKeys={favoriteKeys}
                 onTextChange={(text) => api.setMealsText(date, text)}
                 onToggleLine={(i) => api.toggleLine(date, i)}
                 onToggleFavorite={(i) => api.toggleFavorite(date, i)}

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import emptyDayImg from "../assets/empty-day.png";
 import favoriteImg from "../assets/favorite.png";
 import { formatDayLabel, isSaturday, isSunday } from "../lib/date";
+import { normalize } from "../lib/normalize";
 import type { DateKey, DayMeals } from "../types";
 
 type Props = {
@@ -10,6 +11,8 @@ type Props = {
   isToday: boolean;
   /** 未来の空日ウィンドウに含まれる日か（SPEC「空状態の応援表示」） */
   showCheer: boolean;
+  /** お気に入り判定用の正規化済みキー集合 */
+  favoriteKeys: Set<string>;
   onTextChange: (text: string) => void;
   onToggleLine: (lineIndex: number) => void;
   onToggleFavorite: (lineIndex: number) => void;
@@ -20,6 +23,7 @@ export function DayRow({
   day,
   isToday,
   showCheer,
+  favoriteKeys,
   onTextChange,
   onToggleLine,
   onToggleFavorite,
@@ -96,7 +100,7 @@ export function DayRow({
                       key={`${dateKey}-${idx}`}
                       text={line.text}
                       done={line.done}
-                      favorite={line.favorite ?? false}
+                      favorite={favoriteKeys.has(normalize(line.text))}
                       onToggle={(e) => {
                         e.stopPropagation();
                         onToggleLine(idx);

@@ -8,12 +8,17 @@ type Props = {
 
 export function StockList({ api }: Props) {
   const [expanded, setExpanded] = useState(true);
-  const [draft, setDraft] = useState("");
+  const [draftName, setDraftName] = useState("");
+  const [draftQty, setDraftQty] = useState("");
 
   function handleAdd() {
-    if (draft.trim() === "") return;
-    api.addStock(draft);
-    setDraft("");
+    const name = draftName.trim();
+    if (name === "") return;
+    const parsed = Number.parseInt(draftQty, 10);
+    const qty = Number.isFinite(parsed) && parsed >= 1 ? parsed : 1;
+    api.addStock(name, qty);
+    setDraftName("");
+    setDraftQty("");
   }
 
   return (
@@ -39,39 +44,84 @@ export function StockList({ api }: Props) {
             {api.data.stock.map((item) => (
               <li
                 key={item.id}
-                className="flex items-center gap-2 bg-white rounded px-2 py-1 border border-neutral-200"
+                className="flex items-center gap-1 bg-white rounded px-2 py-1 border border-neutral-200"
               >
                 <button
                   type="button"
-                  onClick={() => api.removeStock(item.id)}
-                  className="w-10 h-10 flex items-center justify-center text-neutral-400 active:text-red-500"
-                  aria-label={`${item.text} を削除`}
+                  onClick={() => api.decStock(item.id)}
+                  disabled={item.qty === 0}
+                  className="w-11 h-11 flex items-center justify-center text-neutral-500 active:text-neutral-800 disabled:opacity-30 text-xl shrink-0"
+                  aria-label={`${item.text} を1減らす`}
                 >
-                  ×
+                  −
                 </button>
-                <span className="flex-1 text-sm text-neutral-800 break-words">{item.text}</span>
+                {item.qty === 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => api.removeStock(item.id)}
+                    className="w-11 h-11 flex items-center justify-center rounded bg-red-500 text-white text-sm font-bold shrink-0"
+                    aria-label={`${item.text} を削除`}
+                  >
+                    0
+                  </button>
+                ) : (
+                  <span
+                    className="w-11 h-11 flex items-center justify-center text-sm font-medium text-neutral-800 shrink-0 tabular-nums"
+                    aria-label={`個数 ${item.qty}`}
+                  >
+                    {item.qty}
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => api.incStock(item.id)}
+                  className="w-11 h-11 flex items-center justify-center text-neutral-500 active:text-neutral-800 text-xl shrink-0"
+                  aria-label={`${item.text} を1増やす`}
+                >
+                  ＋
+                </button>
+                <span className="flex-1 text-sm text-neutral-800 break-words pl-1">
+                  {item.text}
+                </span>
               </li>
             ))}
           </ul>
-          <div className="flex gap-2">
+          <div className="flex gap-1">
             <input
               type="text"
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
+              value={draftName}
+              onChange={(e) => setDraftName(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   e.preventDefault();
                   handleAdd();
                 }
               }}
-              placeholder="ストックを追加"
-              className="flex-1 text-sm px-2 py-2 rounded border border-neutral-200 bg-white outline-none focus:border-neutral-400 min-h-11"
+              placeholder="ストック名"
+              className="flex-1 min-w-0 text-sm px-2 py-2 rounded border border-neutral-200 bg-white outline-none focus:border-neutral-400 min-h-11"
+              aria-label="ストック名"
+            />
+            <input
+              type="number"
+              inputMode="numeric"
+              min={1}
+              value={draftQty}
+              onChange={(e) => setDraftQty(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  handleAdd();
+                }
+              }}
+              placeholder="1"
+              className="w-14 text-sm px-2 py-2 rounded border border-neutral-200 bg-white outline-none focus:border-neutral-400 min-h-11 text-center tabular-nums"
+              aria-label="個数（省略で1）"
             />
             <button
               type="button"
               onClick={handleAdd}
-              className="px-4 py-2 rounded bg-neutral-800 text-white text-sm min-h-11 min-w-11 disabled:opacity-50"
-              disabled={draft.trim() === ""}
+              className="px-3 py-2 rounded bg-neutral-800 text-white text-sm min-h-11 min-w-11 disabled:opacity-50 shrink-0"
+              disabled={draftName.trim() === ""}
             >
               追加
             </button>

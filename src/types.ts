@@ -12,8 +12,6 @@ export type MealLine = {
   text: string;
   /** 完了済みか */
   done: boolean;
-  /** お気に入りマーカー（任意・既存データ互換のためオプショナル） */
-  favorite?: boolean;
 };
 
 /** 1日分の献立 */
@@ -28,6 +26,8 @@ export type StockItem = {
   id: string;
   /** 表示テキスト */
   text: string;
+  /** 個数（0 になると削除確認 UI に変化する。復帰可能） */
+  qty: number;
 };
 
 /** localStorage に保存する全体データ */
@@ -35,6 +35,8 @@ export type AppData = {
   version: 1;
   meals: Record<DateKey, DayMeals>;
   stock: StockItem[];
+  /** お気に入り（正規化テキストの集合）。同じ料理を別日に書いても共通でマーキングされる */
+  favorites: string[];
 };
 
 /** 検索結果1件 */

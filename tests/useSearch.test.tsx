@@ -21,6 +21,7 @@ function makeData(): AppData {
       },
     },
     stock: [],
+    favorites: [],
   };
 }
 
