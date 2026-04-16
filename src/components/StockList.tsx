@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import emptyStockImg from "../assets/empty-stock.png";
+import favoriteImg from "../assets/favorite.png";
 import type { AppDataApi } from "../hooks/useAppData";
+import { favoriteKey } from "../lib/normalize";
 
 type Props = {
   api: AppDataApi;
@@ -10,6 +12,7 @@ export function StockList({ api }: Props) {
   const [expanded, setExpanded] = useState(true);
   const [draftName, setDraftName] = useState("");
   const [draftQty, setDraftQty] = useState("");
+  const favoriteKeys = useMemo(() => new Set(api.data.favorites), [api.data.favorites]);
 
   function handleAdd() {
     const name = draftName.trim();
@@ -80,8 +83,11 @@ export function StockList({ api }: Props) {
                 >
                   ＋
                 </button>
-                <span className="flex-1 text-sm text-neutral-800 break-words pl-1">
-                  {item.text}
+                <span className="flex-1 text-sm text-neutral-800 break-words pl-1 flex items-center gap-1">
+                  <span className="break-words">{item.text}</span>
+                  {favoriteKeys.has(favoriteKey(item.text)) && (
+                    <img src={favoriteImg} alt="" aria-hidden="true" className="w-4 h-4 shrink-0" />
+                  )}
                 </span>
               </li>
             ))}
