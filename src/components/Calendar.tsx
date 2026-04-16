@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import weekCompleteImg from "../assets/week-complete.png";
 import type { AppDataApi } from "../hooks/useAppData";
 import { computeCheerDates } from "../lib/cheer";
@@ -30,6 +30,9 @@ export function Calendar({ api, scrollTarget }: Props) {
   const rowRefs = useRef<Map<DateKey, HTMLDivElement>>(new Map());
   const didInitialScroll = useRef(false);
 
+  // 当日が画面外に出たことを示す状態。null の場合は画面内にいる
+  const [todayOffscreen, setTodayOffscreen] = useState<"above" | "below" | null>(null);
+
   // 未来の空日に応援イラストを出す対象日集合（SPEC「空状態の応援表示」）
   const cheerDates = useMemo(
     () => computeCheerDates(api.data.meals, today, INITIAL_SPAN),
@@ -54,18 +57,27 @@ export function Calendar({ api, scrollTarget }: Props) {
     return () => window.clearTimeout(timer);
   }, [api.justCompletedSunday, api.clearJustCompleted]);
 
-  // 初期スクロール：当日を画面上部へ（sticky な月ヘッダーの直下に並ぶ位置）
-  useEffect(() => {
-    if (didInitialScroll.current) return;
-    const todayRow = rowRefs.current.get(today);
-    const container = containerRef.current;
-    if (todayRow && container) {
+  // 当日を画面上部（sticky 月ヘッダーの直下）にスクロール
+  const scrollToToday = useCallback(
+    (behavior: ScrollBehavior) => {
+      const todayRow = rowRefs.current.get(today);
+      const container = containerRef.current;
+      if (!todayRow || !container) return;
       const stickyHeader = container.querySelector<HTMLElement>(".sticky");
       const headerHeight = stickyHeader?.offsetHeight ?? 0;
-      container.scrollTop = todayRow.offsetTop - headerHeight;
+      container.scrollTo({ top: todayRow.offsetTop - headerHeight, behavior });
+    },
+    [today],
+  );
+
+  // 初期スクロール：当日を画面上部へ
+  useEffect(() => {
+    if (didInitialScroll.current) return;
+    if (rowRefs.current.has(today) && containerRef.current) {
+      scrollToToday("auto");
       didInitialScroll.current = true;
     }
-  }, [today]);
+  }, [today, scrollToToday]);
 
   // scrollTarget への移動
   useEffect(() => {
@@ -88,7 +100,7 @@ export function Calendar({ api, scrollTarget }: Props) {
     });
   }, [scrollTarget]);
 
-  // 端スクロール検知して範囲を広げる
+  // 端スクロール検知して範囲を広げる + 当日が画面外かを追跡
   function handleScroll() {
     const container = containerRef.current;
     if (!container) return;
@@ -103,6 +115,21 @@ export function Calendar({ api, scrollTarget }: Props) {
         start: prev.start,
         end: addDaysKey(prev.end, EXTEND_SPAN),
       }));
+    }
+
+    // 当日行と viewport を比較して、ボタン表示を更新
+    const todayRow = rowRefs.current.get(today);
+    if (!todayRow) return;
+    const rowTop = todayRow.offsetTop;
+    const rowBottom = rowTop + todayRow.offsetHeight;
+    const viewTop = scrollTop;
+    const viewBottom = scrollTop + clientHeight;
+    if (rowBottom <= viewTop) {
+      setTodayOffscreen("above");
+    } else if (rowTop >= viewBottom) {
+      setTodayOffscreen("below");
+    } else {
+      setTodayOffscreen(null);
     }
   }
 
@@ -178,6 +205,17 @@ export function Calendar({ api, scrollTarget }: Props) {
         >
           <img src={weekCompleteImg} alt="" aria-hidden="true" className="w-40 h-40 drop-shadow" />
         </div>
+      )}
+      {todayOffscreen && (
+        <button
+          type="button"
+          onClick={() => scrollToToday("smooth")}
+          aria-label="今日にスクロール"
+          className="absolute bottom-3 right-3 h-11 px-4 rounded-full bg-white/95 shadow-md border border-neutral-200 text-sm font-medium text-neutral-700 flex items-center gap-1 active:bg-neutral-100"
+        >
+          <span aria-hidden="true">{todayOffscreen === "above" ? "↑" : "↓"}</span>
+          <span>今日</span>
+        </button>
       )}
     </div>
   );
