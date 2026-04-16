@@ -78,7 +78,7 @@ describe("DayRow", () => {
   });
 
   describe("alwaysEditable=false（遠方日付）", () => {
-    it("初期状態では textarea ではなく編集ボタンが見える（タップ進入方式）", () => {
+    it("初期状態では textarea ではなく編集トリガー領域が見える（タップ進入方式）", () => {
       render(
         <DayRow
           dateKey={dateKey}
@@ -91,8 +91,9 @@ describe("DayRow", () => {
           onToggleFavorite={() => {}}
         />,
       );
-      const editTrigger = screen.getByRole("button", { name: /4月15日.*献立を編集/ });
-      expect(editTrigger.tagName).toBe("BUTTON");
+      // 編集トリガーは div（button ではない：button の入れ子回避）で aria-label を持つ
+      const editTrigger = screen.getByLabelText(/4月15日.*献立を編集/);
+      expect(editTrigger.tagName).toBe("DIV");
       // textarea はマウントされない
       expect(screen.queryByLabelText(/4月15日.*献立を入力/)).toBeNull();
     });

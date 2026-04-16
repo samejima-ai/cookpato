@@ -138,10 +138,13 @@ export function DayRow({
             aria-label={`${formatDayLabel(dateKey)} の献立を編集`}
           />
         ) : (
-          <button
-            type="button"
+          // 外側はトグル/お気に入りボタンを内包するため <button> ではなく <div> を使う。
+          // button 入れ子は HTML 的に無効で、アクセシビリティツリー崩れ・クリック挙動の
+          // 不整合を招くため、兄弟要素としてトグルと編集トリガーを並立させる。
+          // 編集トリガーは「テキスト領域のタップ」で発火する（子要素のボタンは stopPropagation）。
+          <div
             onClick={() => setEditing(true)}
-            className="w-full text-left min-h-11 py-1"
+            className="w-full min-h-11 py-1 cursor-text"
             aria-label={`${formatDayLabel(dateKey)} の献立を編集`}
           >
             {isEmptyDay ? (
@@ -170,7 +173,7 @@ export function DayRow({
                 ))}
               </ul>
             )}
-          </button>
+          </div>
         )}
       </div>
     </div>
@@ -258,14 +261,18 @@ function LineItem({
     );
   }
 
-  // タップ進入モードの行：親が「タップで編集」なので、トグルは行頭の小さなボタン。
-  // ヒット領域は w-11 h-11（44px）+ -ml-1 のはみ出しで実質的に行左域を覆う。
+  // タップ進入モードの行：親 <div> が「テキスト領域タップで編集モード進入」を担う。
+  // SPEC/CLAUDE「完了トグルのヒット領域は行全体の左 1/3 以上」要件を満たすため、
+  // トグルボタン自体を w-1/3（最小 44px）まで広げる。チェックボックス本体は左寄せで
+  // 視覚的位置を保ちつつ、ボタン領域の残余で広いタップターゲットを得る。
+  // テキスト span にはクリックハンドラを付けないので、タップは外側 <div> にバブリング
+  // して編集モードへ進入する。
   return (
-    <li className={`flex items-start gap-2 py-0.5 rounded ${rowBgClass}`}>
+    <li className={`flex items-stretch min-h-11 rounded ${rowBgClass}`}>
       <button
         type="button"
         onClick={handleToggle}
-        className="w-11 h-11 -my-2 -ml-1 flex items-center justify-center shrink-0"
+        className="w-1/3 min-w-11 flex items-center px-1 shrink-0"
         aria-label={done ? "未完了に戻す" : "完了にする"}
         aria-pressed={done}
       >
@@ -275,11 +282,13 @@ function LineItem({
           {done ? "✓" : ""}
         </span>
       </button>
-      <span className={`flex-1 pt-2 text-base leading-7 break-words ${textClass}`}>{text}</span>
+      <span className={`flex-1 self-center text-base leading-7 break-words ${textClass}`}>
+        {text}
+      </span>
       <button
         type="button"
         onClick={handleFavorite}
-        className="w-11 h-11 -my-2 -mr-1 flex items-center justify-center shrink-0"
+        className="w-11 h-11 flex items-center justify-center shrink-0"
         aria-label={favorite ? "お気に入り解除" : "お気に入りに追加"}
         aria-pressed={favorite}
       >

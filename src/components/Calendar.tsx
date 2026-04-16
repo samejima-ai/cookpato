@@ -181,6 +181,31 @@ export function Calendar({ api, scrollTarget }: Props) {
     prevScrollHeightRef.current = container.scrollHeight;
   }, [range.start]);
 
+  // 各日付行の ref コールバックを安定化するキャッシュ。
+  // 無名関数をインラインで渡すと毎レンダー新規参照になり、React が旧ref→null→
+  // 新ref→element の形で ref を張り直す。その結果 IntersectionObserver の
+  // observe/unobserve がチャーンして、alwaysEditable 判定の揺れ（モードフラップ）や
+  // 入力中のパフォーマンス劣化を招くため、日付単位で関数をメモ化する。
+  const rowRefCallbacks = useRef<Map<DateKey, (el: HTMLDivElement | null) => void>>(new Map());
+  const getRowRefCallback = useCallback((date: DateKey) => {
+    const cached = rowRefCallbacks.current.get(date);
+    if (cached) return cached;
+    const cb = (el: HTMLDivElement | null) => {
+      if (el) {
+        el.dataset.date = date;
+        rowRefs.current.set(date, el);
+        observerRef.current?.observe(el);
+      } else {
+        const prev = rowRefs.current.get(date);
+        if (prev) observerRef.current?.unobserve(prev);
+        rowRefs.current.delete(date);
+        visibleDatesRef.current.delete(date);
+      }
+    };
+    rowRefCallbacks.current.set(date, cb);
+    return cb;
+  }, []);
+
   return (
     <div ref={containerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto bg-white">
       {dates.map((date) => {
@@ -194,21 +219,7 @@ export function Calendar({ api, scrollTarget }: Props) {
                 {formatMonthHeader(date)}
               </div>
             )}
-            <div
-              data-date={date}
-              ref={(el) => {
-                if (el) {
-                  el.dataset.date = date;
-                  rowRefs.current.set(date, el);
-                  observerRef.current?.observe(el);
-                } else {
-                  const prev = rowRefs.current.get(date);
-                  if (prev) observerRef.current?.unobserve(prev);
-                  rowRefs.current.delete(date);
-                  visibleDatesRef.current.delete(date);
-                }
-              }}
-            >
+            <div data-date={date} ref={getRowRefCallback(date)}>
               <DayRow
                 dateKey={date}
                 day={api.data.meals[date]}
