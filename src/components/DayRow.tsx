@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import emptyDayImg from "../assets/empty-day.png";
 import favoriteImg from "../assets/favorite.png";
 import { formatDayLabel, isSaturday, isSunday } from "../lib/date";
-import { normalize } from "../lib/normalize";
+import { favoriteKey } from "../lib/normalize";
 import type { DateKey, DayMeals } from "../types";
 
 type Props = {
@@ -100,7 +100,7 @@ export function DayRow({
                       key={`${dateKey}-${idx}`}
                       text={line.text}
                       done={line.done}
-                      favorite={favoriteKeys.has(normalize(line.text))}
+                      favorite={favoriteKeys.has(favoriteKey(line.text))}
                       onToggle={(e) => {
                         e.stopPropagation();
                         onToggleLine(idx);

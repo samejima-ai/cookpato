@@ -1,7 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 import { useAppData } from "../src/hooks/useAppData";
-import { normalize } from "../src/lib/normalize";
+import { favoriteKey } from "../src/lib/normalize";
 
 beforeEach(() => {
   localStorage.clear();
@@ -142,8 +142,8 @@ describe("useAppData", () => {
       act(() => {
         result.current.toggleFavorite("2026-04-15", 0);
       });
-      expect(result.current.data.favorites).toContain(normalize("豚バラ大根"));
-      expect(result.current.data.favorites).not.toContain(normalize("サラダ"));
+      expect(result.current.data.favorites).toContain(favoriteKey("豚バラ大根"));
+      expect(result.current.data.favorites).not.toContain(favoriteKey("サラダ"));
     });
 
     it("同じ料理を再度 toggle すると favorites から外れる", () => {
@@ -154,11 +154,11 @@ describe("useAppData", () => {
       act(() => {
         result.current.toggleFavorite("2026-04-15", 0);
       });
-      expect(result.current.data.favorites).toContain(normalize("カレー"));
+      expect(result.current.data.favorites).toContain(favoriteKey("カレー"));
       act(() => {
         result.current.toggleFavorite("2026-04-15", 0);
       });
-      expect(result.current.data.favorites).not.toContain(normalize("カレー"));
+      expect(result.current.data.favorites).not.toContain(favoriteKey("カレー"));
     });
 
     it("別日に同じ料理を書いてもお気に入りキーは共通（正規化一致：ひらがな/カタカナ）", () => {
@@ -171,14 +171,31 @@ describe("useAppData", () => {
         result.current.toggleFavorite("2026-04-15", 0);
       });
       // ひらがな/カタカナは normalize で同一キーになる
-      const key = normalize("豚バラ大根");
-      expect(normalize("豚ばら大根")).toBe(key);
+      const key = favoriteKey("豚バラ大根");
+      expect(favoriteKey("豚ばら大根")).toBe(key);
       expect(result.current.data.favorites).toContain(key);
       // 別日からの解除も一発で効く（共通キー）
       act(() => {
         result.current.toggleFavorite("2026-05-01", 0);
       });
       expect(result.current.data.favorites).not.toContain(key);
+    });
+
+    it("空白区切りの補足付きでも先頭トークン一致で共通マーキングされる", () => {
+      const { result } = renderHook(() => useAppData());
+      act(() => {
+        result.current.setMealsText("2026-04-15", "豚バラもやし");
+        result.current.setMealsText("2026-04-16", "豚バラもやし 味噌");
+        result.current.setMealsText("2026-04-17", "豚ばらもやし");
+      });
+      act(() => {
+        result.current.toggleFavorite("2026-04-15", 0);
+      });
+      const key = favoriteKey("豚バラもやし");
+      expect(result.current.data.favorites).toEqual([key]);
+      // 3 行とも同じキーに解決されることを確認
+      expect(favoriteKey("豚バラもやし 味噌")).toBe(key);
+      expect(favoriteKey("豚ばらもやし")).toBe(key);
     });
 
     it("空文字の行はお気に入り対象外", () => {
@@ -202,7 +219,7 @@ describe("useAppData", () => {
         result.current.toggleFavorite("2026-04-15", 0);
         result.current.toggleLine("2026-04-15", 0);
       });
-      expect(result.current.data.favorites).toContain(normalize("カレー"));
+      expect(result.current.data.favorites).toContain(favoriteKey("カレー"));
       expect(result.current.data.meals["2026-04-15"]?.lines[0]?.done).toBe(true);
     });
 

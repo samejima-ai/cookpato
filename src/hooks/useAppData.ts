@@ -4,7 +4,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { generateId } from "../lib/id";
-import { normalize } from "../lib/normalize";
+import { favoriteKey } from "../lib/normalize";
 import { loadData, saveData } from "../lib/storage";
 import type { AppData, DateKey, DayMeals } from "../types";
 
@@ -83,7 +83,7 @@ export function useAppData(): AppDataApi {
       if (!day) return prev;
       const line = day.lines[lineIndex];
       if (!line || line.text === "") return prev;
-      const key = normalize(line.text);
+      const key = favoriteKey(line.text);
       if (key === "") return prev;
       const already = prev.favorites.includes(key);
       const favorites = already

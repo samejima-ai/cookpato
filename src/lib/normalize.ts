@@ -145,6 +145,17 @@ export function normalize(str: string): string {
 }
 
 /**
+ * お気に入りの共有キー。空白区切りの先頭トークンを normalize したものを返す。
+ * 例：「豚バラもやし 味噌」「豚ばらもやし」「豚バラもやし」は全て同じキーになる。
+ * 空文字や空白のみは "" を返す。
+ */
+export function favoriteKey(text: string): string {
+  const first = text.trim().split(/\s+/)[0] ?? "";
+  if (first === "") return "";
+  return normalize(first);
+}
+
+/**
  * 部分一致判定（正規化後）。
  */
 export function includesNormalized(haystack: string, needle: string): boolean {
