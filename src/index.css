@@ -1,0 +1,38 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  -webkit-text-size-adjust: 100%;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Hiragino Kaku Gothic ProN",
+    sans-serif;
+  background-color: #fafafa;
+  color: #222;
+  overscroll-behavior: none;
+}
+
+/* textarea の iOS 上でのフォーカス時ズーム抑止（16px 以上で発火しない） */
+textarea,
+input[type="text"],
+input[type="search"] {
+  font-size: 16px;
+}
+
+/* iOS safe-area 対応 */
+.safe-top {
+  padding-top: env(safe-area-inset-top);
+}
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
