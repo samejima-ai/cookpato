@@ -38,6 +38,48 @@ describe("useAppData", () => {
     expect(result.current.data.meals["2026-04-15"]?.lines[1]?.done).toBe(false);
   });
 
+  describe("deleteLine", () => {
+    it("指定行だけ削除され、他行の完了状態は維持される", () => {
+      const { result } = renderHook(() => useAppData());
+      act(() => {
+        result.current.setMealsText("2026-04-15", "豚バラ大根\nサラダ\nスープ");
+      });
+      act(() => {
+        result.current.toggleLine("2026-04-15", 0); // 豚バラ大根 done
+        result.current.toggleLine("2026-04-15", 2); // スープ done
+      });
+      act(() => {
+        result.current.deleteLine("2026-04-15", 1); // サラダ削除
+      });
+      const lines = result.current.data.meals["2026-04-15"]?.lines ?? [];
+      expect(lines.map((l) => l.text)).toEqual(["豚バラ大根", "スープ"]);
+      expect(lines[0]?.done).toBe(true);
+      expect(lines[1]?.done).toBe(true);
+    });
+
+    it("全行を削除すると meals からその日が消える", () => {
+      const { result } = renderHook(() => useAppData());
+      act(() => {
+        result.current.setMealsText("2026-04-15", "カレー");
+      });
+      act(() => {
+        result.current.deleteLine("2026-04-15", 0);
+      });
+      expect(result.current.data.meals["2026-04-15"]).toBeUndefined();
+    });
+
+    it("範囲外 index は no-op", () => {
+      const { result } = renderHook(() => useAppData());
+      act(() => {
+        result.current.setMealsText("2026-04-15", "カレー");
+      });
+      act(() => {
+        result.current.deleteLine("2026-04-15", 5);
+      });
+      expect(result.current.data.meals["2026-04-15"]?.lines).toHaveLength(1);
+    });
+  });
+
   it("編集で行数が変わると完了状態がリセットされる（内容が同じ行は維持）", () => {
     const { result } = renderHook(() => useAppData());
     act(() => {

@@ -16,6 +16,8 @@ export type AppDataApi = {
   setMealsText: (date: DateKey, text: string) => void;
   /** 1日分の完了トグル（行インデックス単位） */
   toggleLine: (date: DateKey, lineIndex: number) => void;
+  /** 指定行だけを削除（他の行の完了・お気に入りは保持） */
+  deleteLine: (date: DateKey, lineIndex: number) => void;
   /** お気に入りトグル。同じ料理（正規化テキスト一致）が別日にあれば共通でマーキングされる */
   toggleFavorite: (date: DateKey, lineIndex: number) => void;
   /** ストック追加。qty 省略時は 1 */
@@ -109,6 +111,24 @@ export function useAppData(): AppDataApi {
     });
   }, []);
 
+  const deleteLine = useCallback((date: DateKey, lineIndex: number) => {
+    setState((prev) => {
+      const day = prev.data.meals[date];
+      if (!day) return prev;
+      if (lineIndex < 0 || lineIndex >= day.lines.length) return prev;
+      const nextLines = day.lines.filter((_, i) => i !== lineIndex);
+      const nextMeals = { ...prev.data.meals };
+      const nothingLeft =
+        nextLines.length === 0 || (nextLines.length === 1 && nextLines[0]?.text === "");
+      if (nothingLeft) {
+        delete nextMeals[date];
+      } else {
+        nextMeals[date] = { lines: nextLines };
+      }
+      return { ...prev, data: { ...prev.data, meals: nextMeals } };
+    });
+  }, []);
+
   const toggleFavorite = useCallback((date: DateKey, lineIndex: number) => {
     setState((prev) => {
       const day = prev.data.meals[date];
@@ -171,6 +191,7 @@ export function useAppData(): AppDataApi {
     data: state.data,
     setMealsText,
     toggleLine,
+    deleteLine,
     toggleFavorite,
     addStock,
     incStock,

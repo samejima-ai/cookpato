@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import emptyStockImg from "../assets/empty-stock.png";
 import favoriteImg from "../assets/favorite.png";
 import type { AppDataApi } from "../hooks/useAppData";
+import { tapFeedback } from "../lib/haptics";
 import { favoriteKey } from "../lib/normalize";
 
 type Props = {
@@ -61,7 +62,10 @@ export function StockList({ api }: Props) {
                 {item.qty === 0 ? (
                   <button
                     type="button"
-                    onClick={() => api.removeStock(item.id)}
+                    onClick={() => {
+                      tapFeedback();
+                      api.removeStock(item.id);
+                    }}
                     className="w-11 h-11 flex items-center justify-center rounded bg-red-500 text-white text-sm font-bold shrink-0"
                     aria-label={`${item.text} を削除`}
                   >
