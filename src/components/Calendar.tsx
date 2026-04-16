@@ -29,9 +29,21 @@ export function Calendar({ api, scrollTarget }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const rowRefs = useRef<Map<DateKey, HTMLDivElement>>(new Map());
   const didInitialScroll = useRef(false);
+  // sticky 月ヘッダーの高さは Tailwind の静的スタイルで決まるので、初回 1 度だけ
+  // 計測してキャッシュする。スクロール毎に querySelector + offsetHeight を読むと
+  // forced layout の原因になるため。
+  const headerHeightRef = useRef(0);
 
   // 当日が画面外に出たことを示す状態。null の場合は画面内にいる
   const [todayOffscreen, setTodayOffscreen] = useState<"above" | "below" | null>(null);
+
+  // sticky 月ヘッダーの高さを遅延初期化して返す（ref 参照なので依存なし）
+  const getHeaderHeight = useCallback(() => {
+    if (headerHeightRef.current > 0) return headerHeightRef.current;
+    const sticky = containerRef.current?.querySelector<HTMLElement>(".sticky");
+    headerHeightRef.current = sticky?.offsetHeight ?? 0;
+    return headerHeightRef.current;
+  }, []);
 
   // 未来の空日に応援イラストを出す対象日集合（SPEC「空状態の応援表示」）
   const cheerDates = useMemo(
@@ -63,11 +75,9 @@ export function Calendar({ api, scrollTarget }: Props) {
       const todayRow = rowRefs.current.get(today);
       const container = containerRef.current;
       if (!todayRow || !container) return;
-      const stickyHeader = container.querySelector<HTMLElement>(".sticky");
-      const headerHeight = stickyHeader?.offsetHeight ?? 0;
-      container.scrollTo({ top: todayRow.offsetTop - headerHeight, behavior });
+      container.scrollTo({ top: todayRow.offsetTop - getHeaderHeight(), behavior });
     },
-    [today],
+    [today, getHeaderHeight],
   );
 
   // 初期スクロール：当日を画面上部へ
@@ -122,11 +132,9 @@ export function Calendar({ api, scrollTarget }: Props) {
     // ヘッダー高さ分だけ viewTop を下にずらす。
     const todayRow = rowRefs.current.get(today);
     if (!todayRow) return;
-    const stickyHeader = container.querySelector<HTMLElement>(".sticky");
-    const headerHeight = stickyHeader?.offsetHeight ?? 0;
     const rowTop = todayRow.offsetTop;
     const rowBottom = rowTop + todayRow.offsetHeight;
-    const viewTop = scrollTop + headerHeight;
+    const viewTop = scrollTop + getHeaderHeight();
     const viewBottom = scrollTop + clientHeight;
     if (rowBottom <= viewTop) {
       setTodayOffscreen("above");
