@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import emptyDayImg from "../assets/empty-day.png";
 import favoriteImg from "../assets/favorite.png";
+import weekCompleteImg from "../assets/week-complete.png";
 import { formatDayLabel, isSaturday, isSunday } from "../lib/date";
 import { favoriteKey } from "../lib/normalize";
 import type { DateKey, DayMeals } from "../types";
@@ -11,6 +12,8 @@ type Props = {
   isToday: boolean;
   /** 未来の空日ウィンドウに含まれる日か（SPEC「空状態の応援表示」） */
   showCheer: boolean;
+  /** 「その週（日〜土）がすべて埋まった」日曜行に常駐マークを出すか */
+  showWeekComplete: boolean;
   /** お気に入り判定用の正規化済みキー集合 */
   favoriteKeys: Set<string>;
   onTextChange: (text: string) => void;
@@ -23,6 +26,7 @@ export function DayRow({
   day,
   isToday,
   showCheer,
+  showWeekComplete,
   favoriteKeys,
   onTextChange,
   onToggleLine,
@@ -55,7 +59,18 @@ export function DayRow({
   return (
     <div className={`flex gap-3 px-3 py-2 border-b border-neutral-100 ${bgClass}`}>
       <div className="w-24 shrink-0">
-        <div className={`text-sm font-medium ${labelColor}`}>{formatDayLabel(dateKey)}</div>
+        <div className={`text-sm font-medium ${labelColor} flex items-center gap-1`}>
+          <span>{formatDayLabel(dateKey)}</span>
+          {showWeekComplete && isSunday(dateKey) && (
+            <img
+              src={weekCompleteImg}
+              alt=""
+              aria-hidden="true"
+              title="この週の献立が埋まりました"
+              className="w-6 h-6 shrink-0"
+            />
+          )}
+        </div>
         {isToday && <div className="text-xs text-yellow-700 mt-0.5">今日</div>}
       </div>
       <div className="flex-1 min-w-0">

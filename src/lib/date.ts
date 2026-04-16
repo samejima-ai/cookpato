@@ -2,7 +2,7 @@
  * 日付操作のユーティリティ。date-fns を使用する。
  * DateKey は YYYY-MM-DD 形式の文字列（ローカル基準）。
  */
-import { addDays, format, getDay, parseISO, startOfDay } from "date-fns";
+import { addDays, format, getDay, parseISO, startOfDay, startOfWeek } from "date-fns";
 import type { DateKey } from "../types";
 
 const DATE_FORMAT = "yyyy-MM-dd";
@@ -53,6 +53,11 @@ export function isSaturday(key: DateKey): boolean {
 /** その月の初日か（=月ヘッダーを描画する位置） */
 export function isFirstOfMonth(key: DateKey): boolean {
   return fromDateKey(key).getDate() === 1;
+}
+
+/** 指定日を含む週（日曜始まり）の日曜の DateKey */
+export function startOfWeekKey(key: DateKey): DateKey {
+  return toDateKey(startOfWeek(fromDateKey(key), { weekStartsOn: 0 }));
 }
 
 /** 2日間が同月か */

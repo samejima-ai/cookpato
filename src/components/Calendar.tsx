@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import weekCompleteImg from "../assets/week-complete.png";
 import type { AppDataApi } from "../hooks/useAppData";
 import { computeCheerDates } from "../lib/cheer";
 import { addDaysKey, formatMonthHeader, isFirstOfMonth, isSameMonth, todayKey } from "../lib/date";
+import { computeCompleteWeekSundays } from "../lib/week";
 import type { DateKey } from "../types";
 import { DayRow } from "./DayRow";
 
@@ -36,6 +38,21 @@ export function Calendar({ api, scrollTarget }: Props) {
 
   // お気に入りは正規化テキスト集合として保持されているので Set に変換して渡す
   const favoriteKeys = useMemo(() => new Set(api.data.favorites), [api.data.favorites]);
+
+  // 満タン達成済みの週（日曜キー集合）。日曜行に常駐アイコンを出すため
+  const completeWeekSundays = useMemo(
+    () => computeCompleteWeekSundays(api.data.meals, range.start, range.end),
+    [api.data.meals, range.start, range.end],
+  );
+
+  // 「頑張ったね」演出：justCompletedSunday がセットされたら 3 秒後に自動クリア
+  useEffect(() => {
+    if (!api.justCompletedSunday) return;
+    const timer = window.setTimeout(() => {
+      api.clearJustCompleted();
+    }, 3000);
+    return () => window.clearTimeout(timer);
+  }, [api.justCompletedSunday, api.clearJustCompleted]);
 
   // 初期スクロール：当日を画面中央へ
   useEffect(() => {
@@ -117,38 +134,50 @@ export function Calendar({ api, scrollTarget }: Props) {
   }, [range.start]);
 
   return (
-    <div ref={containerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto bg-white">
-      {dates.map((date) => {
-        const showHeader = isFirstOfMonth(date) || date === dates[0];
-        const headerVisible =
-          showHeader || !isSameMonth(date, dates[dates.indexOf(date) - 1] ?? "");
-        return (
-          <div key={date}>
-            {headerVisible && (
-              <div className="sticky top-0 z-10 bg-neutral-50 border-y border-neutral-200 px-4 py-2 text-sm font-semibold text-neutral-600">
-                {formatMonthHeader(date)}
+    <div className="flex-1 relative overflow-hidden bg-white">
+      <div ref={containerRef} onScroll={handleScroll} className="h-full overflow-y-auto">
+        {dates.map((date) => {
+          const showHeader = isFirstOfMonth(date) || date === dates[0];
+          const headerVisible =
+            showHeader || !isSameMonth(date, dates[dates.indexOf(date) - 1] ?? "");
+          return (
+            <div key={date}>
+              {headerVisible && (
+                <div className="sticky top-0 z-10 bg-neutral-50 border-y border-neutral-200 px-4 py-2 text-sm font-semibold text-neutral-600">
+                  {formatMonthHeader(date)}
+                </div>
+              )}
+              <div
+                ref={(el) => {
+                  if (el) rowRefs.current.set(date, el);
+                  else rowRefs.current.delete(date);
+                }}
+              >
+                <DayRow
+                  dateKey={date}
+                  day={api.data.meals[date]}
+                  isToday={date === today}
+                  showCheer={cheerDates.has(date)}
+                  showWeekComplete={completeWeekSundays.has(date)}
+                  favoriteKeys={favoriteKeys}
+                  onTextChange={(text) => api.setMealsText(date, text)}
+                  onToggleLine={(i) => api.toggleLine(date, i)}
+                  onToggleFavorite={(i) => api.toggleFavorite(date, i)}
+                />
               </div>
-            )}
-            <div
-              ref={(el) => {
-                if (el) rowRefs.current.set(date, el);
-                else rowRefs.current.delete(date);
-              }}
-            >
-              <DayRow
-                dateKey={date}
-                day={api.data.meals[date]}
-                isToday={date === today}
-                showCheer={cheerDates.has(date)}
-                favoriteKeys={favoriteKeys}
-                onTextChange={(text) => api.setMealsText(date, text)}
-                onToggleLine={(i) => api.toggleLine(date, i)}
-                onToggleFavorite={(i) => api.toggleFavorite(date, i)}
-              />
             </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
+      {api.justCompletedSunday && (
+        <div
+          className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 animate-week-complete"
+          aria-live="polite"
+          aria-label="今週の献立が埋まりました"
+        >
+          <img src={weekCompleteImg} alt="" aria-hidden="true" className="w-40 h-40 drop-shadow" />
+        </div>
+      )}
     </div>
   );
 }

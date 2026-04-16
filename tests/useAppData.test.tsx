@@ -239,4 +239,57 @@ describe("useAppData", () => {
       expect(result.current.data.meals["2026-04-10"]?.lines[0]?.text).toBe("豚バラ大根");
     });
   });
+
+  describe("週達成の遷移トリガー", () => {
+    // 2026-04-12 は日曜、2026-04-18 は土曜
+    const SUN = "2026-04-12";
+    const WEEK = [SUN, "2026-04-13", "2026-04-14", "2026-04-15", "2026-04-16", "2026-04-17"];
+    const SAT = "2026-04-18";
+
+    it("初期は justCompletedSunday が null", () => {
+      const { result } = renderHook(() => useAppData());
+      expect(result.current.justCompletedSunday).toBeNull();
+    });
+
+    it("最後の1日を埋めて満タンになった瞬間にその週の日曜がセットされる", () => {
+      const { result } = renderHook(() => useAppData());
+      act(() => {
+        for (const d of WEEK) result.current.setMealsText(d, "x");
+      });
+      expect(result.current.justCompletedSunday).toBeNull();
+      act(() => {
+        result.current.setMealsText(SAT, "x");
+      });
+      expect(result.current.justCompletedSunday).toBe(SUN);
+    });
+
+    it("既に満タンの週を再編集しても再トリガーしない", () => {
+      const { result } = renderHook(() => useAppData());
+      act(() => {
+        for (const d of [...WEEK, SAT]) result.current.setMealsText(d, "x");
+      });
+      expect(result.current.justCompletedSunday).toBe(SUN);
+      act(() => {
+        result.current.clearJustCompleted();
+      });
+      expect(result.current.justCompletedSunday).toBeNull();
+      // 既に満タンの週を再編集
+      act(() => {
+        result.current.setMealsText(SAT, "y");
+      });
+      expect(result.current.justCompletedSunday).toBeNull();
+    });
+
+    it("clearJustCompleted で null に戻せる", () => {
+      const { result } = renderHook(() => useAppData());
+      act(() => {
+        for (const d of [...WEEK, SAT]) result.current.setMealsText(d, "x");
+      });
+      expect(result.current.justCompletedSunday).toBe(SUN);
+      act(() => {
+        result.current.clearJustCompleted();
+      });
+      expect(result.current.justCompletedSunday).toBeNull();
+    });
+  });
 });

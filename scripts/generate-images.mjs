@@ -83,6 +83,9 @@ async function main() {
 
   // お気に入りアイコン（行内表示用、表示は CSS で 24px に縮小）
   await makeTransparent("shimaenaga-heart.png", "favorite.png", 80);
+
+  // 週達成マーク（日〜土が全て埋まった週のヘッダに常駐、CSS で小さく表示）
+  await makeTransparent("shimaenaga-ganbattane.png", "week-complete.png", 160);
 }
 
 main().catch((err) => {

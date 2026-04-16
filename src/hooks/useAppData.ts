@@ -3,9 +3,11 @@
  * 1箇所に集約することで副作用をカプセル化する。
  */
 import { useCallback, useEffect, useState } from "react";
+import { startOfWeekKey } from "../lib/date";
 import { generateId } from "../lib/id";
 import { favoriteKey } from "../lib/normalize";
 import { loadData, saveData } from "../lib/storage";
+import { isWeekComplete } from "../lib/week";
 import type { AppData, DateKey, DayMeals } from "../types";
 
 export type AppDataApi = {
@@ -24,6 +26,10 @@ export type AppDataApi = {
   decStock: (id: string) => void;
   /** ストック削除（qty が 0 のときにユーザーが明示的に 0 ボタンを押したら呼ぶ） */
   removeStock: (id: string) => void;
+  /** 直前の setMealsText で週が満タンになった瞬間の日曜 DateKey（演出トリガー用）。永続化しない */
+  justCompletedSunday: DateKey | null;
+  /** 「頑張ったね」演出の終了時に呼ぶ */
+  clearJustCompleted: () => void;
 };
 
 /** 入力テキストを lines に変換（完了状態は同一テキストのみ維持、それ以外リセット） */
@@ -38,32 +44,55 @@ function textToLines(text: string, previous: DayMeals | undefined): DayMeals {
   return { lines };
 }
 
+/**
+ * 内部状態。data と演出トリガーをひとまとめにして、
+ * 同一 tick 内で setMealsText が複数回呼ばれても直前の結果を連鎖して見られるようにする
+ * （関数更新で必ず prev を経由するため）。
+ */
+type State = { data: AppData; justCompletedSunday: DateKey | null };
+
 export function useAppData(): AppDataApi {
-  const [data, setData] = useState<AppData>(() => loadData());
+  const [state, setState] = useState<State>(() => ({
+    data: loadData(),
+    justCompletedSunday: null,
+  }));
 
   // data が変わるたびに保存
   useEffect(() => {
-    saveData(data);
-  }, [data]);
+    saveData(state.data);
+  }, [state.data]);
 
   const setMealsText = useCallback((date: DateKey, text: string) => {
-    setData((prev) => {
-      const nextDay = textToLines(text, prev.meals[date]);
-      // 全行が空文字かつ完了もなければ meals から削除して肥大化防止
+    setState((prev) => {
+      const nextDay = textToLines(text, prev.data.meals[date]);
       const isEmpty = nextDay.lines.every((l) => l.text === "" && !l.done);
-      const nextMeals = { ...prev.meals };
+      const nextMeals = { ...prev.data.meals };
       if (isEmpty) {
         delete nextMeals[date];
       } else {
         nextMeals[date] = nextDay;
       }
-      return { ...prev, meals: nextMeals };
+      // 週の「未達成 → 達成」遷移を検知して演出トリガーを立てる
+      const wasComplete = isWeekComplete(prev.data.meals, date);
+      const nowComplete = isWeekComplete(nextMeals, date);
+      const justCompletedSunday =
+        !wasComplete && nowComplete ? startOfWeekKey(date) : prev.justCompletedSunday;
+      return {
+        data: { ...prev.data, meals: nextMeals },
+        justCompletedSunday,
+      };
     });
   }, []);
 
+  const clearJustCompleted = useCallback(() => {
+    setState((prev) =>
+      prev.justCompletedSunday === null ? prev : { ...prev, justCompletedSunday: null },
+    );
+  }, []);
+
   const toggleLine = useCallback((date: DateKey, lineIndex: number) => {
-    setData((prev) => {
-      const day = prev.meals[date];
+    setState((prev) => {
+      const day = prev.data.meals[date];
       if (!day) return prev;
       const targetLine = day.lines[lineIndex];
       if (!targetLine) return prev;
@@ -72,24 +101,27 @@ export function useAppData(): AppDataApi {
       );
       return {
         ...prev,
-        meals: { ...prev.meals, [date]: { lines: nextLines } },
+        data: {
+          ...prev.data,
+          meals: { ...prev.data.meals, [date]: { lines: nextLines } },
+        },
       };
     });
   }, []);
 
   const toggleFavorite = useCallback((date: DateKey, lineIndex: number) => {
-    setData((prev) => {
-      const day = prev.meals[date];
+    setState((prev) => {
+      const day = prev.data.meals[date];
       if (!day) return prev;
       const line = day.lines[lineIndex];
       if (!line || line.text === "") return prev;
       const key = favoriteKey(line.text);
       if (key === "") return prev;
-      const already = prev.favorites.includes(key);
+      const already = prev.data.favorites.includes(key);
       const favorites = already
-        ? prev.favorites.filter((k) => k !== key)
-        : [...prev.favorites, key];
-      return { ...prev, favorites };
+        ? prev.data.favorites.filter((k) => k !== key)
+        : [...prev.data.favorites, key];
+      return { ...prev, data: { ...prev.data, favorites } };
     });
   }, []);
 
@@ -97,35 +129,46 @@ export function useAppData(): AppDataApi {
     const trimmed = text.trim();
     if (trimmed === "") return;
     const safeQty = Number.isFinite(qty) ? Math.max(1, Math.floor(qty)) : 1;
-    setData((prev) => ({
+    setState((prev) => ({
       ...prev,
-      stock: [...prev.stock, { id: generateId(), text: trimmed, qty: safeQty }],
+      data: {
+        ...prev.data,
+        stock: [...prev.data.stock, { id: generateId(), text: trimmed, qty: safeQty }],
+      },
     }));
   }, []);
 
   const incStock = useCallback((id: string) => {
-    setData((prev) => ({
+    setState((prev) => ({
       ...prev,
-      stock: prev.stock.map((s) => (s.id === id ? { ...s, qty: s.qty + 1 } : s)),
+      data: {
+        ...prev.data,
+        stock: prev.data.stock.map((s) => (s.id === id ? { ...s, qty: s.qty + 1 } : s)),
+      },
     }));
   }, []);
 
   const decStock = useCallback((id: string) => {
-    setData((prev) => ({
+    setState((prev) => ({
       ...prev,
-      stock: prev.stock.map((s) => (s.id === id ? { ...s, qty: Math.max(0, s.qty - 1) } : s)),
+      data: {
+        ...prev.data,
+        stock: prev.data.stock.map((s) =>
+          s.id === id ? { ...s, qty: Math.max(0, s.qty - 1) } : s,
+        ),
+      },
     }));
   }, []);
 
   const removeStock = useCallback((id: string) => {
-    setData((prev) => ({
+    setState((prev) => ({
       ...prev,
-      stock: prev.stock.filter((s) => s.id !== id),
+      data: { ...prev.data, stock: prev.data.stock.filter((s) => s.id !== id) },
     }));
   }, []);
 
   return {
-    data,
+    data: state.data,
     setMealsText,
     toggleLine,
     toggleFavorite,
@@ -133,5 +176,7 @@ export function useAppData(): AppDataApi {
     incStock,
     decStock,
     removeStock,
+    justCompletedSunday: state.justCompletedSunday,
+    clearJustCompleted,
   };
 }
