@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AppDataApi } from "../hooks/useAppData";
 import { computeCheerDates } from "../lib/cheer";
 import { addDaysKey, formatMonthHeader, isFirstOfMonth, isSameMonth, todayKey } from "../lib/date";
@@ -16,6 +16,12 @@ const INITIAL_SPAN = 60;
 /** スクロール端に近づいたら展開する日数 */
 const EXTEND_SPAN = 30;
 const TRIGGER_PX = 800;
+/**
+ * 「常時 textarea」とする可視範囲のバッファ（前後日数）。
+ * SPEC「フリー入力 / 編集モードの扱い」：viewport ± 数日〜10日程度。
+ * 初期値は ±7 日（= 約 1 週間。妻の週単位入力ユースケースに合わせる）。
+ */
+const EDIT_BUFFER_DAYS = 7;
 
 export function Calendar({ api, scrollTarget }: Props) {
   const today = todayKey();
@@ -33,6 +39,68 @@ export function Calendar({ api, scrollTarget }: Props) {
     () => computeCheerDates(api.data.meals, today, INITIAL_SPAN),
     [api.data.meals, today],
   );
+
+  // 「常時 textarea 化」する日付集合（可視 + バッファ）
+  // 初期値：当日を中央に置くので today ± EDIT_BUFFER_DAYS を入れておく
+  const [editableDates, setEditableDates] = useState<Set<DateKey>>(() => {
+    const set = new Set<DateKey>();
+    for (let i = -EDIT_BUFFER_DAYS; i <= EDIT_BUFFER_DAYS; i++) {
+      set.add(addDaysKey(today, i));
+    }
+    return set;
+  });
+
+  // IntersectionObserver で可視 DayRow を検出
+  const visibleDatesRef = useRef<Set<DateKey>>(new Set());
+  const observerRef = useRef<IntersectionObserver | null>(null);
+
+  const recomputeEditable = useCallback(() => {
+    const next = new Set<DateKey>();
+    // 初期表示の安定性のため、当日付近は常に含める（IntersectionObserver の確定前にも編集可能）
+    for (let i = -EDIT_BUFFER_DAYS; i <= EDIT_BUFFER_DAYS; i++) {
+      next.add(addDaysKey(today, i));
+    }
+    for (const d of visibleDatesRef.current) {
+      for (let i = -EDIT_BUFFER_DAYS; i <= EDIT_BUFFER_DAYS; i++) {
+        next.add(addDaysKey(d, i));
+      }
+    }
+    setEditableDates((prev) => (areSetsEqual(prev, next) ? prev : next));
+  }, [today]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        let changed = false;
+        for (const entry of entries) {
+          const date = (entry.target as HTMLElement).dataset.date;
+          if (!date) continue;
+          if (entry.isIntersecting) {
+            if (!visibleDatesRef.current.has(date)) {
+              visibleDatesRef.current.add(date);
+              changed = true;
+            }
+          } else if (visibleDatesRef.current.has(date)) {
+            visibleDatesRef.current.delete(date);
+            changed = true;
+          }
+        }
+        if (changed) recomputeEditable();
+      },
+      { root: container, rootMargin: "0px", threshold: 0.01 },
+    );
+    observerRef.current = observer;
+    // 既にマウント済みの行を監視対象に追加
+    for (const el of rowRefs.current.values()) {
+      observer.observe(el);
+    }
+    return () => {
+      observer.disconnect();
+      observerRef.current = null;
+    };
+  }, [recomputeEditable]);
 
   // 初期スクロール：当日を画面中央へ
   useEffect(() => {
@@ -127,9 +195,18 @@ export function Calendar({ api, scrollTarget }: Props) {
               </div>
             )}
             <div
+              data-date={date}
               ref={(el) => {
-                if (el) rowRefs.current.set(date, el);
-                else rowRefs.current.delete(date);
+                if (el) {
+                  el.dataset.date = date;
+                  rowRefs.current.set(date, el);
+                  observerRef.current?.observe(el);
+                } else {
+                  const prev = rowRefs.current.get(date);
+                  if (prev) observerRef.current?.unobserve(prev);
+                  rowRefs.current.delete(date);
+                  visibleDatesRef.current.delete(date);
+                }
               }}
             >
               <DayRow
@@ -137,6 +214,7 @@ export function Calendar({ api, scrollTarget }: Props) {
                 day={api.data.meals[date]}
                 isToday={date === today}
                 showCheer={cheerDates.has(date)}
+                alwaysEditable={editableDates.has(date)}
                 onTextChange={(text) => api.setMealsText(date, text)}
                 onToggleLine={(i) => api.toggleLine(date, i)}
                 onToggleFavorite={(i) => api.toggleFavorite(date, i)}
@@ -147,4 +225,12 @@ export function Calendar({ api, scrollTarget }: Props) {
       })}
     </div>
   );
+}
+
+/** Set の浅い等価判定（再レンダ抑止用） */
+function areSetsEqual<T>(a: Set<T>, b: Set<T>): boolean {
+  if (a === b) return true;
+  if (a.size !== b.size) return false;
+  for (const v of a) if (!b.has(v)) return false;
+  return true;
 }

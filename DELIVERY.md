@@ -1,5 +1,34 @@
 # DELIVERY — Cookpato 初回実装
 
+## 2026-04-16 改訂：妻フィードバック反映（Issue #1〜#3）
+
+ユーザーフィードバックを Layer 0 → Layer 1 で処理し、以下 3 件を実装した。
+詳細は `SPEC.md` および `CLAUDE.md` を参照。
+
+| Issue | 種別 | 主な変更 | 実装ファイル |
+|---|---|---|---|
+| #1 常時 textarea（範囲限定） | SPEC「フリー入力」改訂 | 可視範囲付近の日付行は textarea を常時マウントし、タップ進入なしで入力可能。範囲外は従来方式を維持し DOM コストを抑制 | `src/components/Calendar.tsx`（IntersectionObserver で可視追跡 / ±7 日バッファ）、`src/components/DayRow.tsx`（`alwaysEditable` props 追加） |
+| #2 完了トグル操作性 | SPEC「完了トグル」改訂 + UI規約追記 | ヒット領域を行左 1/3 以上に拡張、視覚フィードバック 3 点併用（打ち消し線＋文字色＋行背景色）、触覚フィードバック発火、300ms 連続タップのチャタリング防止 | `src/components/DayRow.tsx`（`LineItem` リファクタ・`useDebouncedTap`）、`src/lib/haptics.ts`（新規） |
+| #3 ストック削除タップ一本化 | SPEC「ストックリスト」改訂 | スワイプ削除を仕様から削除（元から未実装）。削除ボタン × の領域を 40→44px に拡張。触覚フィードバック追加 | `src/components/StockList.tsx` |
+
+### センサー結果（改訂後）
+
+| 項目 | 結果 |
+|---|---|
+| `npm run typecheck` | ✅ |
+| `npm run lint` | ✅ エラー・警告なし |
+| `npm run format:check` | ✅ |
+| `npm test` | ✅ 45/45 passed（DayRow に 5 件追加） |
+| `npm run build` | ✅（189.24 kB / gzip 63.32 kB、PWA SW 生成済） |
+
+### 残課題・次回 Layer 0 観察
+
+- 可視範囲のバッファは ±7 日（実装上の初期値）。妻が連続入力で「もっと先まで一気に書きたい」「重い」のいずれかを述べた場合に再調整する必要がある。
+- iOS Safari は触覚フィードバック JS API を持たないため、`navigator.vibrate` フォールバックは実機 iPhone 11 では発火しない。SPEC 上は許容（`非対応端末では発火しなくてよい`）。将来 Web Vibration の標準化や iOS の対応状況に応じて再検討。
+- 常時 textarea モードでは「textarea + 完了チップリスト」の二段構成となり、テキスト内容が二箇所に表示される。連続入力体験を最優先した設計だが、視覚的冗長性が問題化した場合は Apple Notes 風のインライン編集（行ごとの input + 個別 toggle）へのリファクタを検討する。
+
+---
+
 ## 概要
 
 妻用の献立メモアプリ「Cookpato」の初回実装を完了した。

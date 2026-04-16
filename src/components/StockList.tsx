@@ -1,6 +1,7 @@
 import { useState } from "react";
 import emptyStockImg from "../assets/empty-stock.png";
 import type { AppDataApi } from "../hooks/useAppData";
+import { tapFeedback } from "../lib/haptics";
 
 type Props = {
   api: AppDataApi;
@@ -14,6 +15,11 @@ export function StockList({ api }: Props) {
     if (draft.trim() === "") return;
     api.addStock(draft);
     setDraft("");
+  }
+
+  function handleRemove(id: string) {
+    tapFeedback();
+    api.removeStock(id);
   }
 
   return (
@@ -43,8 +49,8 @@ export function StockList({ api }: Props) {
               >
                 <button
                   type="button"
-                  onClick={() => api.removeStock(item.id)}
-                  className="w-10 h-10 flex items-center justify-center text-neutral-400 active:text-red-500"
+                  onClick={() => handleRemove(item.id)}
+                  className="w-11 h-11 -my-1 -ml-1 flex items-center justify-center text-neutral-400 active:text-red-500 text-lg"
                   aria-label={`${item.text} を削除`}
                 >
                   ×
