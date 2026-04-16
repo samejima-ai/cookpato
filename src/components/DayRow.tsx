@@ -4,6 +4,7 @@ import favoriteImg from "../assets/favorite.png";
 import weekMedalImg from "../assets/week-medal.png";
 import { formatDayLabel, isSaturday, isSunday } from "../lib/date";
 import { tapFeedback } from "../lib/haptics";
+import { getHolidayName } from "../lib/holidays";
 import { favoriteKey } from "../lib/normalize";
 import type { DateKey, DayMeals } from "../types";
 
@@ -50,11 +51,13 @@ export function DayRow({
     }
   }, [editing]);
 
-  const labelColor = isSunday(dateKey)
-    ? "text-red-500"
-    : isSaturday(dateKey)
-      ? "text-blue-500"
-      : "text-neutral-700";
+  const holidayName = getHolidayName(dateKey);
+  const labelColor =
+    holidayName || isSunday(dateKey)
+      ? "text-red-500"
+      : isSaturday(dateKey)
+        ? "text-blue-500"
+        : "text-neutral-700";
 
   const bgClass = isToday ? "bg-yellow-50" : "bg-white";
   const isEmptyDay = lines.length === 0 || (lines.length === 1 && lines[0]?.text === "");
@@ -76,6 +79,9 @@ export function DayRow({
             />
           )}
         </div>
+        {holidayName && (
+          <div className="text-xs text-red-500 mt-0.5 leading-tight">{holidayName}</div>
+        )}
         {isToday && <div className="text-xs text-yellow-700 mt-0.5">今日</div>}
       </div>
       <div className="flex-1 min-w-0">
