@@ -117,12 +117,16 @@ export function Calendar({ api, scrollTarget }: Props) {
       }));
     }
 
-    // 当日行と viewport を比較して、ボタン表示を更新
+    // 当日行と viewport を比較して、ボタン表示を更新。
+    // sticky 月ヘッダーで上部が隠れた状態を「画面外（above）」として扱うため、
+    // ヘッダー高さ分だけ viewTop を下にずらす。
     const todayRow = rowRefs.current.get(today);
     if (!todayRow) return;
+    const stickyHeader = container.querySelector<HTMLElement>(".sticky");
+    const headerHeight = stickyHeader?.offsetHeight ?? 0;
     const rowTop = todayRow.offsetTop;
     const rowBottom = rowTop + todayRow.offsetHeight;
-    const viewTop = scrollTop;
+    const viewTop = scrollTop + headerHeight;
     const viewBottom = scrollTop + clientHeight;
     if (rowBottom <= viewTop) {
       setTodayOffscreen("above");
