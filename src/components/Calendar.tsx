@@ -54,15 +54,15 @@ export function Calendar({ api, scrollTarget }: Props) {
     return () => window.clearTimeout(timer);
   }, [api.justCompletedSunday, api.clearJustCompleted]);
 
-  // 初期スクロール：当日を画面中央へ
+  // 初期スクロール：当日を画面上部へ（sticky な月ヘッダーの直下に並ぶ位置）
   useEffect(() => {
     if (didInitialScroll.current) return;
     const todayRow = rowRefs.current.get(today);
     const container = containerRef.current;
     if (todayRow && container) {
-      const rowTop = todayRow.offsetTop;
-      const rowHeight = todayRow.offsetHeight;
-      container.scrollTop = rowTop - container.clientHeight / 2 + rowHeight / 2;
+      const stickyHeader = container.querySelector<HTMLElement>(".sticky");
+      const headerHeight = stickyHeader?.offsetHeight ?? 0;
+      container.scrollTop = todayRow.offsetTop - headerHeight;
       didInitialScroll.current = true;
     }
   }, [today]);
