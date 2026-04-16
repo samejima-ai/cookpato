@@ -86,7 +86,7 @@ export function StockList({ api }: Props) {
                 <span className="flex-1 text-sm text-neutral-800 break-words pl-1 flex items-center gap-1">
                   <span className="break-words">{item.text}</span>
                   {favoriteKeys.has(favoriteKey(item.text)) && (
-                    <img src={favoriteImg} alt="" aria-hidden="true" className="w-4 h-4 shrink-0" />
+                    <img src={favoriteImg} alt="" aria-hidden="true" className="w-8 h-8 shrink-0" />
                   )}
                 </span>
               </li>
