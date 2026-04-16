@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import emptyDayImg from "../assets/empty-day.png";
 import favoriteImg from "../assets/favorite.png";
-import weekCompleteImg from "../assets/week-complete.png";
+import weekMedalImg from "../assets/week-medal.png";
 import { formatDayLabel, isSaturday, isSunday } from "../lib/date";
 import { favoriteKey } from "../lib/normalize";
 import type { DateKey, DayMeals } from "../types";
@@ -63,7 +63,7 @@ export function DayRow({
           <span>{formatDayLabel(dateKey)}</span>
           {showWeekComplete && isSunday(dateKey) && (
             <img
-              src={weekCompleteImg}
+              src={weekMedalImg}
               alt=""
               aria-hidden="true"
               title="この週の献立が埋まりました"
