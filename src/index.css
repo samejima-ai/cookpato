@@ -36,3 +36,18 @@ input[type="search"] {
 .safe-bottom {
   padding-bottom: env(safe-area-inset-bottom);
 }
+
+/* 空日の応援イラスト：2 秒周期で水平反転を交互に（ぱたぱた演出） */
+@keyframes cheer-flip {
+  0%,
+  49.99% {
+    transform: scaleX(1);
+  }
+  50%,
+  100% {
+    transform: scaleX(-1);
+  }
+}
+.animate-cheer-flip {
+  animation: cheer-flip 2s steps(1, end) infinite;
+}

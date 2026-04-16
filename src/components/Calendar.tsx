@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { AppDataApi } from "../hooks/useAppData";
+import { computeCheerDates } from "../lib/cheer";
 import { addDaysKey, formatMonthHeader, isFirstOfMonth, isSameMonth, todayKey } from "../lib/date";
 import type { DateKey } from "../types";
 import { DayRow } from "./DayRow";
@@ -26,6 +27,12 @@ export function Calendar({ api, scrollTarget }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const rowRefs = useRef<Map<DateKey, HTMLDivElement>>(new Map());
   const didInitialScroll = useRef(false);
+
+  // 未来の空日に応援イラストを出す対象日集合（SPEC「空状態の応援表示」）
+  const cheerDates = useMemo(
+    () => computeCheerDates(api.data.meals, today, INITIAL_SPAN),
+    [api.data.meals, today],
+  );
 
   // 初期スクロール：当日を画面中央へ
   useEffect(() => {
@@ -129,6 +136,7 @@ export function Calendar({ api, scrollTarget }: Props) {
                 dateKey={date}
                 day={api.data.meals[date]}
                 isToday={date === today}
+                showCheer={cheerDates.has(date)}
                 onTextChange={(text) => api.setMealsText(date, text)}
                 onToggleLine={(i) => api.toggleLine(date, i)}
                 onToggleFavorite={(i) => api.toggleFavorite(date, i)}

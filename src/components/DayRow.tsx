@@ -8,6 +8,8 @@ type Props = {
   dateKey: DateKey;
   day: DayMeals | undefined;
   isToday: boolean;
+  /** 未来の空日ウィンドウに含まれる日か（SPEC「空状態の応援表示」） */
+  showCheer: boolean;
   onTextChange: (text: string) => void;
   onToggleLine: (lineIndex: number) => void;
   onToggleFavorite: (lineIndex: number) => void;
@@ -17,6 +19,7 @@ export function DayRow({
   dateKey,
   day,
   isToday,
+  showCheer,
   onTextChange,
   onToggleLine,
   onToggleFavorite,
@@ -75,12 +78,12 @@ export function DayRow({
             {isEmptyDay ? (
               <span className="flex items-center gap-2">
                 <span className="text-neutral-300 text-base">＋</span>
-                {isToday && (
+                {showCheer && (
                   <img
                     src={emptyDayImg}
                     alt=""
                     aria-hidden="true"
-                    className="w-10 h-10 opacity-80"
+                    className="w-10 h-10 opacity-80 animate-cheer-flip"
                   />
                 )}
               </span>
