@@ -53,13 +53,13 @@ export function SearchBar({
         <button
           type="button"
           onClick={onActiveCountTap}
-          aria-label={`アクティブ行の過去ヒット${badgeLabel}件を表示`}
-          className="shrink-0 min-w-11 min-h-11 flex items-center justify-center px-2"
+          aria-label={`過去の類似ヒット ${badgeLabel} 件を表示`}
+          // ヘッダー高さ（input と py-2 で決まる ~40px）を超えないサイズに抑える
+          // 現状の clear-button は min-h-11 のままなのでそのボタンがある場合は高さが
+          // 変わるが、このバッジ単独表示時（検索欄が空のとき）は高さが変化しない。
+          className="shrink-0 h-6 px-2 rounded-full bg-amber-50 border border-amber-200 text-xs font-medium text-amber-700 tabular-nums flex items-center"
         >
-          <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-1">
-            <span aria-hidden="true">過去</span>
-            <span className="tabular-nums">{badgeLabel}</span>
-          </span>
+          {badgeLabel}
         </button>
       )}
       {value.length > 0 && (

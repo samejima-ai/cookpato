@@ -11,8 +11,8 @@ type Props = {
   api: AppDataApi;
   /** スクロールすべき日付。変わるたびに中央に配置する */
   scrollTarget?: DateKey;
-  /** 編集中 DayRow のカーソル行テキストを親に伝搬する */
-  onActiveQueryChange?: (text: string) => void;
+  /** 編集中 DayRow のカーソル行テキストとその日付を親に伝搬する */
+  onActiveQueryChange?: (text: string, date: DateKey) => void;
 };
 
 /** 初期表示範囲：±60日 */

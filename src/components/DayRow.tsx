@@ -25,11 +25,12 @@ type Props = {
   /** ちょいメモ（料理行とは別枠）の更新 */
   onMemoChange: (text: string) => void;
   /**
-   * 編集中のカーソル行テキスト（料理行 textarea 内）を親に通知する。
+   * 編集中のカーソル行テキストと、その行が属する日付を親に通知する。
    * 編集開始時にも呼び、編集終了（blur）時は空文字で呼ぶ。
    * アクティブ行の類似検索件数をヘッダーに出すためのフック。
+   * 日付は「自分自身を検索対象から除外する」ために使う。
    */
-  onActiveQueryChange?: (text: string) => void;
+  onActiveQueryChange?: (text: string, date: DateKey) => void;
 };
 
 export function DayRow({
@@ -59,19 +60,19 @@ export function DayRow({
       textareaRef.current.setSelectionRange(len, len);
       autoResize(textareaRef.current);
       // 編集進入時点のカーソル行を通知
-      onActiveQueryChange?.(caretLine(textareaRef.current.value, len));
+      onActiveQueryChange?.(caretLine(textareaRef.current.value, len), dateKey);
     }
-  }, [editing, onActiveQueryChange]);
+  }, [editing, onActiveQueryChange, dateKey]);
 
   // 編集終了時にアクティブクエリをクリア
   useEffect(() => {
-    if (!editing) onActiveQueryChange?.("");
-  }, [editing, onActiveQueryChange]);
+    if (!editing) onActiveQueryChange?.("", dateKey);
+  }, [editing, onActiveQueryChange, dateKey]);
 
   function emitActiveLine(el: HTMLTextAreaElement): void {
     if (!onActiveQueryChange) return;
     const caret = el.selectionStart ?? el.value.length;
-    onActiveQueryChange(caretLine(el.value, caret));
+    onActiveQueryChange(caretLine(el.value, caret), dateKey);
   }
 
   const holidayName = getHolidayName(dateKey);
