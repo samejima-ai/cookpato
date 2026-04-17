@@ -45,56 +45,89 @@ export function StockList({ api }: Props) {
             </div>
           )}
           <ul className="space-y-1 mb-2">
-            {api.data.stock.map((item) => (
-              <li
-                key={item.id}
-                className="flex items-center gap-1 bg-white rounded px-2 py-1 border border-neutral-200"
-              >
-                <button
-                  type="button"
-                  onClick={() => api.decStock(item.id)}
-                  disabled={item.qty === 0}
-                  className="w-11 h-11 flex items-center justify-center text-neutral-500 active:text-neutral-800 disabled:opacity-30 text-xl shrink-0"
-                  aria-label={`${item.text} を1減らす`}
+            {api.data.stock.map((item, idx) => {
+              const isFirst = idx === 0;
+              const isLast = idx === api.data.stock.length - 1;
+              return (
+                <li
+                  key={item.id}
+                  className="flex items-center gap-1 bg-white rounded px-2 py-1 border border-neutral-200"
                 >
-                  −
-                </button>
-                {item.qty === 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => api.decStock(item.id)}
+                    disabled={item.qty === 0}
+                    className="w-11 h-11 flex items-center justify-center text-neutral-500 active:text-neutral-800 disabled:opacity-30 text-xl shrink-0"
+                    aria-label={`${item.text} を1減らす`}
+                  >
+                    −
+                  </button>
+                  {item.qty === 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        tapFeedback();
+                        api.removeStock(item.id);
+                      }}
+                      className="w-11 h-11 flex items-center justify-center rounded bg-red-500 text-white text-sm font-bold shrink-0"
+                      aria-label={`${item.text} を削除`}
+                    >
+                      0
+                    </button>
+                  ) : (
+                    <span
+                      className="w-11 h-11 flex items-center justify-center text-sm font-medium text-neutral-800 shrink-0 tabular-nums"
+                      aria-label={`個数 ${item.qty}`}
+                    >
+                      {item.qty}
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => api.incStock(item.id)}
+                    className="w-11 h-11 flex items-center justify-center text-neutral-500 active:text-neutral-800 text-xl shrink-0"
+                    aria-label={`${item.text} を1増やす`}
+                  >
+                    ＋
+                  </button>
+                  <span className="flex-1 text-sm text-neutral-800 break-words pl-1 flex items-center gap-1 min-w-0">
+                    <span className="break-words">{item.text}</span>
+                    {favoriteKeys.has(favoriteKey(item.text)) && (
+                      <img
+                        src={favoriteImg}
+                        alt=""
+                        aria-hidden="true"
+                        className="w-8 h-8 shrink-0"
+                      />
+                    )}
+                  </span>
                   <button
                     type="button"
                     onClick={() => {
                       tapFeedback();
-                      api.removeStock(item.id);
+                      api.moveStockUp(item.id);
                     }}
-                    className="w-11 h-11 flex items-center justify-center rounded bg-red-500 text-white text-sm font-bold shrink-0"
-                    aria-label={`${item.text} を削除`}
+                    disabled={isFirst}
+                    className="w-11 h-11 flex items-center justify-center text-neutral-400 active:text-neutral-800 disabled:opacity-20 text-lg shrink-0"
+                    aria-label={`${item.text} を上へ移動`}
                   >
-                    0
+                    ↑
                   </button>
-                ) : (
-                  <span
-                    className="w-11 h-11 flex items-center justify-center text-sm font-medium text-neutral-800 shrink-0 tabular-nums"
-                    aria-label={`個数 ${item.qty}`}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      tapFeedback();
+                      api.moveStockDown(item.id);
+                    }}
+                    disabled={isLast}
+                    className="w-11 h-11 flex items-center justify-center text-neutral-400 active:text-neutral-800 disabled:opacity-20 text-lg shrink-0"
+                    aria-label={`${item.text} を下へ移動`}
                   >
-                    {item.qty}
-                  </span>
-                )}
-                <button
-                  type="button"
-                  onClick={() => api.incStock(item.id)}
-                  className="w-11 h-11 flex items-center justify-center text-neutral-500 active:text-neutral-800 text-xl shrink-0"
-                  aria-label={`${item.text} を1増やす`}
-                >
-                  ＋
-                </button>
-                <span className="flex-1 text-sm text-neutral-800 break-words pl-1 flex items-center gap-1">
-                  <span className="break-words">{item.text}</span>
-                  {favoriteKeys.has(favoriteKey(item.text)) && (
-                    <img src={favoriteImg} alt="" aria-hidden="true" className="w-8 h-8 shrink-0" />
-                  )}
-                </span>
-              </li>
-            ))}
+                    ↓
+                  </button>
+                </li>
+              );
+            })}
           </ul>
           <div className="flex gap-1">
             <input

@@ -2,7 +2,7 @@
  * localStorage ラッパー。単一キー "cookpato:data:v1" に AppData を JSON で保存。
  * 読み書きエラーは黙って初期値を返す（単一ユーザー・シンプル運用のため）。
  */
-import type { AppData, StockItem } from "../types";
+import type { AppData, DayMeals, StockItem } from "../types";
 
 const STORAGE_KEY = "cookpato:data:v1";
 
@@ -26,9 +26,10 @@ export function loadData(): AppData {
     const favorites = Array.isArray(parsed.favorites)
       ? parsed.favorites.filter((v): v is string => typeof v === "string")
       : [];
+    const meals = coerceMeals(parsed.meals);
     return {
       version: 1,
-      meals: parsed.meals as AppData["meals"],
+      meals,
       stock,
       favorites,
     };
@@ -54,6 +55,30 @@ function isBaseShape(v: unknown): v is BaseShape {
   return (
     o.version === 1 && typeof o.meals === "object" && o.meals !== null && Array.isArray(o.stock)
   );
+}
+
+/** meals の形を最低限安全にする。memo は文字列のみ許容、他は空で落とす */
+function coerceMeals(raw: unknown): Record<string, DayMeals> {
+  if (typeof raw !== "object" || raw === null) return {};
+  const result: Record<string, DayMeals> = {};
+  for (const [date, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof value !== "object" || value === null) continue;
+    const v = value as Record<string, unknown>;
+    const lines = Array.isArray(v.lines)
+      ? v.lines
+          .map((l) => {
+            if (typeof l !== "object" || l === null) return null;
+            const line = l as Record<string, unknown>;
+            if (typeof line.text !== "string") return null;
+            return { text: line.text, done: line.done === true };
+          })
+          .filter((x): x is { text: string; done: boolean } => x !== null)
+      : [];
+    const day: DayMeals = { lines };
+    if (typeof v.memo === "string" && v.memo !== "") day.memo = v.memo;
+    result[date] = day;
+  }
+  return result;
 }
 
 function coerceStockItem(raw: unknown): StockItem | null {

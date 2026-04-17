@@ -28,6 +28,7 @@ function baseProps() {
     onToggleLine: () => {},
     onToggleFavorite: () => {},
     onDeleteLine: () => {},
+    onMemoChange: () => {},
   };
 }
 
@@ -37,7 +38,10 @@ describe("DayRow", () => {
       render(<DayRow {...baseProps()} />);
       const trigger = screen.getByLabelText(/4月15日.*献立を編集/);
       expect(trigger.tagName).toBe("DIV");
-      expect(screen.queryByRole("textbox")).toBeNull();
+      // 献立の textarea は編集モードでのみ出現する（メモの input は常設なので対象外）
+      expect(
+        screen.queryAllByRole("textbox").find((el) => el.tagName === "TEXTAREA"),
+      ).toBeUndefined();
     });
 
     it("お気に入りキーが favoriteKeys に含まれる行はハートが立つ", () => {
@@ -87,7 +91,45 @@ describe("DayRow", () => {
       fireEvent.click(toggle);
       expect(onToggleLine).toHaveBeenCalledWith(0);
       // 編集モード進入したら textarea が現れるが、ここでは現れないはず
-      expect(screen.queryByRole("textbox")).toBeNull();
+      expect(
+        screen.queryAllByRole("textbox").find((el) => el.tagName === "TEXTAREA"),
+      ).toBeUndefined();
+    });
+  });
+
+  describe("ちょいメモ欄", () => {
+    it("memo が空でもメモ入力欄（プレースホルダ「メモ」）が常に表示される", () => {
+      render(<DayRow {...baseProps()} />);
+      const memo = screen.getByLabelText(/4月15日.*のメモ/);
+      expect(memo.tagName).toBe("INPUT");
+      expect((memo as HTMLInputElement).placeholder).toBe("メモ");
+      expect((memo as HTMLInputElement).value).toBe("");
+    });
+
+    it("保存済みの memo が初期値として表示される", () => {
+      render(
+        <DayRow {...baseProps()} day={{ lines: [{ text: "", done: false }], memo: "遅くなる" }} />,
+      );
+      const memo = screen.getByLabelText(/4月15日.*のメモ/) as HTMLInputElement;
+      expect(memo.value).toBe("遅くなる");
+    });
+
+    it("入力のたびに onMemoChange が呼ばれる", () => {
+      const onMemoChange = vi.fn();
+      render(<DayRow {...baseProps()} onMemoChange={onMemoChange} />);
+      const memo = screen.getByLabelText(/4月15日.*のメモ/);
+      fireEvent.change(memo, { target: { value: "外食" } });
+      expect(onMemoChange).toHaveBeenLastCalledWith("外食");
+    });
+
+    it("メモ欄のクリックで料理行の編集モードに入らない", () => {
+      render(<DayRow {...baseProps()} />);
+      const memo = screen.getByLabelText(/4月15日.*のメモ/);
+      fireEvent.click(memo);
+      // 料理行の textarea が出ていないこと（メモ入力は input 型だが role=textbox でもヒットする）
+      const textboxes = screen.queryAllByRole("textbox");
+      // メモ自身は input[type=text] なのでヒットするが、料理行の textarea はヒットしないはず
+      expect(textboxes.some((el) => el.tagName === "TEXTAREA")).toBe(false);
     });
   });
 

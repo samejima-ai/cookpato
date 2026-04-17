@@ -97,6 +97,103 @@ describe("useAppData", () => {
     expect(result.current.data.meals["2026-04-15"]?.lines[1]?.done).toBe(false);
   });
 
+  describe("ちょいメモ", () => {
+    it("setMemo でその日のメモを保存できる", () => {
+      const { result } = renderHook(() => useAppData());
+      act(() => {
+        result.current.setMemo("2026-04-15", "遅くなる");
+      });
+      expect(result.current.data.meals["2026-04-15"]?.memo).toBe("遅くなる");
+    });
+
+    it("setMemo に空文字を渡すと memo が消え、lines も空なら日付ごと除外される", () => {
+      const { result } = renderHook(() => useAppData());
+      act(() => {
+        result.current.setMemo("2026-04-15", "外食");
+      });
+      expect(result.current.data.meals["2026-04-15"]?.memo).toBe("外食");
+      act(() => {
+        result.current.setMemo("2026-04-15", "");
+      });
+      expect(result.current.data.meals["2026-04-15"]).toBeUndefined();
+    });
+
+    it("setMemo に空文字を渡しても lines があれば日付は残り memo だけ消える", () => {
+      const { result } = renderHook(() => useAppData());
+      act(() => {
+        result.current.setMealsText("2026-04-15", "カレー");
+        result.current.setMemo("2026-04-15", "辛口");
+      });
+      expect(result.current.data.meals["2026-04-15"]?.memo).toBe("辛口");
+      act(() => {
+        result.current.setMemo("2026-04-15", "");
+      });
+      expect(result.current.data.meals["2026-04-15"]?.lines[0]?.text).toBe("カレー");
+      expect(result.current.data.meals["2026-04-15"]?.memo).toBeUndefined();
+    });
+
+    it("setMealsText で lines を空にしても memo があれば日付は残る", () => {
+      const { result } = renderHook(() => useAppData());
+      act(() => {
+        result.current.setMealsText("2026-04-15", "カレー");
+        result.current.setMemo("2026-04-15", "遅くなる");
+      });
+      act(() => {
+        result.current.setMealsText("2026-04-15", "");
+      });
+      expect(result.current.data.meals["2026-04-15"]?.memo).toBe("遅くなる");
+    });
+
+    it("deleteLine で全行が消えても memo があれば日付は残る", () => {
+      const { result } = renderHook(() => useAppData());
+      act(() => {
+        result.current.setMealsText("2026-04-15", "カレー");
+        result.current.setMemo("2026-04-15", "メモ");
+      });
+      act(() => {
+        result.current.deleteLine("2026-04-15", 0);
+      });
+      expect(result.current.data.meals["2026-04-15"]?.memo).toBe("メモ");
+      expect(result.current.data.meals["2026-04-15"]?.lines.length).toBe(0);
+    });
+
+    it("memo は週達成判定に影響しない（料理が空なら埋まっていない扱い）", () => {
+      const { result } = renderHook(() => useAppData());
+      // 2026-04-12 (SUN) 〜 2026-04-18 (SAT)
+      const WEEK = [
+        "2026-04-12",
+        "2026-04-13",
+        "2026-04-14",
+        "2026-04-15",
+        "2026-04-16",
+        "2026-04-17",
+      ];
+      act(() => {
+        for (const d of WEEK) result.current.setMealsText(d, "x");
+      });
+      // 土曜はメモだけ設定 → 料理が埋まっていないので達成しない
+      act(() => {
+        result.current.setMemo("2026-04-18", "外食");
+      });
+      expect(result.current.justCompletedSunday).toBeNull();
+    });
+
+    it("legacy データ（memo フィールドなし）は memo undefined で読み込まれる", () => {
+      const legacy = {
+        version: 1,
+        meals: {
+          "2026-04-10": { lines: [{ text: "カレー", done: false }] },
+        },
+        stock: [],
+        favorites: [],
+      };
+      localStorage.setItem("cookpato:data:v1", JSON.stringify(legacy));
+      const { result } = renderHook(() => useAppData());
+      expect(result.current.data.meals["2026-04-10"]?.memo).toBeUndefined();
+      expect(result.current.data.meals["2026-04-10"]?.lines[0]?.text).toBe("カレー");
+    });
+  });
+
   describe("ストック", () => {
     it("addStock は qty 省略時 1 で追加される", () => {
       const { result } = renderHook(() => useAppData());
@@ -172,6 +269,91 @@ describe("useAppData", () => {
       });
       expect(result.current.data.stock).toHaveLength(1);
       expect(result.current.data.stock[0]?.text).toBe("下味豚");
+    });
+
+    describe("並び替え", () => {
+      it("moveStockUp で 1 つ上の項目と入れ替わる", () => {
+        const { result } = renderHook(() => useAppData());
+        act(() => {
+          result.current.addStock("A");
+          result.current.addStock("B");
+          result.current.addStock("C");
+        });
+        const bId = result.current.data.stock[1]?.id ?? "";
+        act(() => {
+          result.current.moveStockUp(bId);
+        });
+        expect(result.current.data.stock.map((s) => s.text)).toEqual(["B", "A", "C"]);
+      });
+
+      it("moveStockDown で 1 つ下の項目と入れ替わる", () => {
+        const { result } = renderHook(() => useAppData());
+        act(() => {
+          result.current.addStock("A");
+          result.current.addStock("B");
+          result.current.addStock("C");
+        });
+        const bId = result.current.data.stock[1]?.id ?? "";
+        act(() => {
+          result.current.moveStockDown(bId);
+        });
+        expect(result.current.data.stock.map((s) => s.text)).toEqual(["A", "C", "B"]);
+      });
+
+      it("先頭で moveStockUp は no-op", () => {
+        const { result } = renderHook(() => useAppData());
+        act(() => {
+          result.current.addStock("A");
+          result.current.addStock("B");
+        });
+        const aId = result.current.data.stock[0]?.id ?? "";
+        act(() => {
+          result.current.moveStockUp(aId);
+        });
+        expect(result.current.data.stock.map((s) => s.text)).toEqual(["A", "B"]);
+      });
+
+      it("末尾で moveStockDown は no-op", () => {
+        const { result } = renderHook(() => useAppData());
+        act(() => {
+          result.current.addStock("A");
+          result.current.addStock("B");
+        });
+        const bId = result.current.data.stock[1]?.id ?? "";
+        act(() => {
+          result.current.moveStockDown(bId);
+        });
+        expect(result.current.data.stock.map((s) => s.text)).toEqual(["A", "B"]);
+      });
+
+      it("不明な id の場合は no-op", () => {
+        const { result } = renderHook(() => useAppData());
+        act(() => {
+          result.current.addStock("A");
+          result.current.addStock("B");
+        });
+        act(() => {
+          result.current.moveStockUp("unknown-id");
+          result.current.moveStockDown("unknown-id");
+        });
+        expect(result.current.data.stock.map((s) => s.text)).toEqual(["A", "B"]);
+      });
+
+      it("qty や個数ボタンの状態は移動後も保持される", () => {
+        const { result } = renderHook(() => useAppData());
+        act(() => {
+          result.current.addStock("A", 5);
+          result.current.addStock("B", 2);
+        });
+        const aId = result.current.data.stock[0]?.id ?? "";
+        act(() => {
+          result.current.moveStockDown(aId);
+        });
+        expect(result.current.data.stock[0]?.text).toBe("B");
+        expect(result.current.data.stock[0]?.qty).toBe(2);
+        expect(result.current.data.stock[1]?.text).toBe("A");
+        expect(result.current.data.stock[1]?.qty).toBe(5);
+      });
     });
   });
 

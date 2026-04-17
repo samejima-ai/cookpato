@@ -22,6 +22,8 @@ type Props = {
   onToggleLine: (lineIndex: number) => void;
   onToggleFavorite: (lineIndex: number) => void;
   onDeleteLine: (lineIndex: number) => void;
+  /** ちょいメモ（料理行とは別枠）の更新 */
+  onMemoChange: (text: string) => void;
 };
 
 export function DayRow({
@@ -35,6 +37,7 @@ export function DayRow({
   onToggleLine,
   onToggleFavorite,
   onDeleteLine,
+  onMemoChange,
 }: Props) {
   const [editing, setEditing] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<number | null>(null);
@@ -146,6 +149,7 @@ export function DayRow({
             )}
           </div>
         )}
+        <MemoField dateKey={dateKey} value={day?.memo ?? ""} onChange={onMemoChange} />
       </div>
       {pendingDelete !== null && (
         <ConfirmDeleteDialog
@@ -352,4 +356,36 @@ function useDebouncedTap(
 function autoResize(el: HTMLTextAreaElement): void {
   el.style.height = "auto";
   el.style.height = `${el.scrollHeight}px`;
+}
+
+type MemoFieldProps = {
+  dateKey: DateKey;
+  value: string;
+  onChange: (text: string) => void;
+};
+
+/**
+ * ちょいメモ欄。料理行とは別枠の1行メモ。
+ * - 常時編集可能（タップで即入力）
+ * - 入力内容は即時保存（onChange ごとに親へ通知）
+ * - 空のときはうっすら「メモ」プレースホルダのみ
+ * - 調理中の誤タップを減らすため、料理行の編集モード進入トリガーとは領域を分離
+ */
+function MemoField({ dateKey, value, onChange }: MemoFieldProps) {
+  return (
+    <div
+      className="mt-1"
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => e.stopPropagation()}
+    >
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="メモ"
+        className="w-full bg-transparent outline-none text-sm text-neutral-500 italic placeholder:text-neutral-300 py-1 min-h-7"
+        aria-label={`${formatDayLabel(dateKey)} のメモ`}
+      />
+    </div>
+  );
 }
