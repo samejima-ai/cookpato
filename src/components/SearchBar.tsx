@@ -21,8 +21,9 @@ export function SearchBar({
   function handle(e: ChangeEvent<HTMLInputElement>) {
     onChange(e.target.value);
   }
-  // 検索欄が空 かつ 件数 > 0 のときだけバッジを出す（結果パネルとの重複回避）
-  const showBadge = value === "" && activeCount > 0;
+  // 検索欄が空（空白のみを含む）かつ 件数 > 0 かつ タップハンドラが渡されているときだけ
+  // バッジを出す（結果パネルとの重複回避＋「押しても何も起きない」バッジの回避）
+  const showBadge = value.trim() === "" && activeCount > 0 && onActiveCountTap != null;
   const badgeLabel = activeCount > activeCountCap ? `${activeCountCap}+` : `${activeCount}`;
   return (
     <div className="flex items-center gap-2 px-3 py-2 bg-white border-b border-neutral-200">

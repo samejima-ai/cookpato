@@ -45,9 +45,12 @@ export function useSearch(data: AppData, query: string, options?: SearchOptions)
 
     for (const date of dates) {
       if (excludeDate != null && date === excludeDate) continue;
-      if (sinceKey != null && date < sinceKey) continue;
-      // 完全一致 + 類似の合計が maxResults に達したら早期終了（軽量動作のため）
-      if (exactHits.length + similarHits.length >= maxResults) break;
+      // dates は降順。sinceKey より古い日付に到達したら以降もすべて古いので打ち切る
+      if (sinceKey != null && date < sinceKey) break;
+      // 完全一致だけで上限に達したら打ち切る。
+      // 合計（完全+類似）で break すると、古い日付にある完全一致を取りこぼし
+      //「完全一致を先、類似を後ろ」の保証が崩れるため、完全一致のみを基準にする。
+      if (exactHits.length >= maxResults) break;
       const day = data.meals[date];
       if (!day) continue;
       const combined = day.lines.map((l) => l.text).join("\n");
