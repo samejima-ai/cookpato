@@ -86,6 +86,7 @@ export function DayRow({
           <div className="text-xs text-red-500 mt-0.5 leading-tight">{holidayName}</div>
         )}
         {isToday && <div className="text-xs text-yellow-700 mt-0.5">今日</div>}
+        <MemoField dateKey={dateKey} value={day?.memo ?? ""} onChange={onMemoChange} />
       </div>
       <div className="flex-1 min-w-0">
         {editing ? (
@@ -149,7 +150,6 @@ export function DayRow({
             )}
           </div>
         )}
-        <MemoField dateKey={dateKey} value={day?.memo ?? ""} onChange={onMemoChange} />
       </div>
       {pendingDelete !== null && (
         <ConfirmDeleteDialog
@@ -365,16 +365,18 @@ type MemoFieldProps = {
 };
 
 /**
- * ちょいメモ欄。料理行とは別枠の1行メモ。
- * - 常時編集可能（タップで即入力）
- * - 入力内容は即時保存（onChange ごとに親へ通知）
- * - 空のときはうっすら「メモ」プレースホルダのみ
- * - 調理中の誤タップを減らすため、料理行の編集モード進入トリガーとは領域を分離
+ * ちょいメモ欄。料理行とは別枠の短文メモ。
+ * - 日付列（w-24 = 96px）内に収める
+ * - 文字数で font-size を段階的に縮小し、1 行で全文表示する
+ *   （短文前提。極端に長い入力は想定しない）
+ * - 空のときは小さくプレースホルダ「メモ」のみ
+ * - 料理行の編集モードとは領域分離（stopPropagation）
  */
 function MemoField({ dateKey, value, onChange }: MemoFieldProps) {
+  const sizeClass = memoSizeClass(value.length);
   return (
     <div
-      className="mt-1"
+      className="mt-0.5"
       onClick={(e) => e.stopPropagation()}
       onKeyDown={(e) => e.stopPropagation()}
     >
@@ -383,9 +385,18 @@ function MemoField({ dateKey, value, onChange }: MemoFieldProps) {
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder="メモ"
-        className="w-full bg-transparent outline-none text-sm text-neutral-500 italic placeholder:text-neutral-300 py-1 min-h-7"
+        className={`w-full bg-transparent outline-none text-neutral-500 italic placeholder:text-neutral-300 placeholder:not-italic placeholder:text-[10px] leading-tight py-0 ${sizeClass}`}
         aria-label={`${formatDayLabel(dateKey)} のメモ`}
       />
     </div>
   );
+}
+
+/** 日付列（約 96px）に収まるよう、文字数で段階的にサイズを落とす */
+function memoSizeClass(len: number): string {
+  if (len === 0) return "text-[10px]";
+  if (len <= 4) return "text-sm";
+  if (len <= 6) return "text-xs";
+  if (len <= 9) return "text-[10px]";
+  return "text-[9px]";
 }
