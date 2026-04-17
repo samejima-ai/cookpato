@@ -11,6 +11,8 @@ type Props = {
   api: AppDataApi;
   /** スクロールすべき日付。変わるたびに中央に配置する */
   scrollTarget?: DateKey;
+  /** 編集中 DayRow のカーソル行テキストを親に伝搬する */
+  onActiveQueryChange?: (text: string) => void;
 };
 
 /** 初期表示範囲：±60日 */
@@ -19,7 +21,7 @@ const INITIAL_SPAN = 60;
 const EXTEND_SPAN = 30;
 const TRIGGER_PX = 800;
 
-export function Calendar({ api, scrollTarget }: Props) {
+export function Calendar({ api, scrollTarget, onActiveQueryChange }: Props) {
   const today = todayKey();
   const [range, setRange] = useState(() => ({
     start: addDaysKey(today, -INITIAL_SPAN),
@@ -204,6 +206,7 @@ export function Calendar({ api, scrollTarget }: Props) {
                   onToggleFavorite={(i) => api.toggleFavorite(date, i)}
                   onDeleteLine={(i) => api.deleteLine(date, i)}
                   onMemoChange={(text) => api.setMemo(date, text)}
+                  onActiveQueryChange={onActiveQueryChange}
                 />
               </div>
             </div>

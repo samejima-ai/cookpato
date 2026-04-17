@@ -24,6 +24,12 @@ type Props = {
   onDeleteLine: (lineIndex: number) => void;
   /** ちょいメモ（料理行とは別枠）の更新 */
   onMemoChange: (text: string) => void;
+  /**
+   * 編集中のカーソル行テキスト（料理行 textarea 内）を親に通知する。
+   * 編集開始時にも呼び、編集終了（blur）時は空文字で呼ぶ。
+   * アクティブ行の類似検索件数をヘッダーに出すためのフック。
+   */
+  onActiveQueryChange?: (text: string) => void;
 };
 
 export function DayRow({
@@ -38,6 +44,7 @@ export function DayRow({
   onToggleFavorite,
   onDeleteLine,
   onMemoChange,
+  onActiveQueryChange,
 }: Props) {
   const [editing, setEditing] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<number | null>(null);
@@ -51,8 +58,21 @@ export function DayRow({
       const len = textareaRef.current.value.length;
       textareaRef.current.setSelectionRange(len, len);
       autoResize(textareaRef.current);
+      // 編集進入時点のカーソル行を通知
+      onActiveQueryChange?.(caretLine(textareaRef.current.value, len));
     }
-  }, [editing]);
+  }, [editing, onActiveQueryChange]);
+
+  // 編集終了時にアクティブクエリをクリア
+  useEffect(() => {
+    if (!editing) onActiveQueryChange?.("");
+  }, [editing, onActiveQueryChange]);
+
+  function emitActiveLine(el: HTMLTextAreaElement): void {
+    if (!onActiveQueryChange) return;
+    const caret = el.selectionStart ?? el.value.length;
+    onActiveQueryChange(caretLine(el.value, caret));
+  }
 
   const holidayName = getHolidayName(dateKey);
   const labelColor =
@@ -96,7 +116,11 @@ export function DayRow({
             onChange={(e) => {
               onTextChange(e.target.value);
               autoResize(e.target);
+              emitActiveLine(e.target);
             }}
+            onSelect={(e) => emitActiveLine(e.currentTarget)}
+            onKeyUp={(e) => emitActiveLine(e.currentTarget)}
+            onClick={(e) => emitActiveLine(e.currentTarget)}
             onBlur={() => setEditing(false)}
             className="w-full resize-none bg-transparent outline-none text-base leading-7 min-h-7"
             rows={Math.max(1, lines.length)}
@@ -356,6 +380,17 @@ function useDebouncedTap(
 function autoResize(el: HTMLTextAreaElement): void {
   el.style.height = "auto";
   el.style.height = `${el.scrollHeight}px`;
+}
+
+/**
+ * textarea の value とカーソル位置から、カーソルのある 1 行分のテキストを返す。
+ * 行末改行は含めない。空行は空文字を返す。
+ */
+function caretLine(value: string, caret: number): string {
+  const start = value.lastIndexOf("\n", caret - 1) + 1;
+  const nextNl = value.indexOf("\n", caret);
+  const end = nextNl === -1 ? value.length : nextNl;
+  return value.slice(start, end);
 }
 
 type MemoFieldProps = {

@@ -5,26 +5,45 @@
  * マッチの種類：
  *  - exact: 正規化後の文字列がクエリをそのまま含む
  *  - similar: カタカナ部分に 2 文字以上の共通連続がある、または文字集合の重複率が高い
+ *
+ * options：
+ *  - sinceDays: 今日から N 日前までの meals に走査を限定する（省略時は全期間）
+ *  - maxResults: 返却する最大件数（省略時は 20）
+ * アクティブ行の件数バッジ用途では、sinceDays=365／maxResults を小さめに指定して
+ * 毎キーストロークの走査コストを抑える。
  */
 import { useMemo } from "react";
+import { addDaysKey, todayKey } from "../lib/date";
 import { extractKatakana, hasCommonSubstring, normalize } from "../lib/normalize";
 import type { AppData, SearchHit } from "../types";
 
-const MAX_RESULTS = 20;
+const DEFAULT_MAX_RESULTS = 20;
 const SIMILAR_RATIO_THRESHOLD = 0.8;
 
-export function useSearch(data: AppData, query: string): SearchHit[] {
+export type SearchOptions = {
+  sinceDays?: number;
+  maxResults?: number;
+};
+
+export function useSearch(data: AppData, query: string, options?: SearchOptions): SearchHit[] {
+  const sinceDays = options?.sinceDays;
+  const maxResults = options?.maxResults ?? DEFAULT_MAX_RESULTS;
   return useMemo(() => {
     const q = query.trim();
     if (q === "") return [];
     const normalizedQuery = normalize(q);
     const queryKana = extractKatakana(normalizedQuery);
 
+    const sinceKey = sinceDays != null ? addDaysKey(todayKey(), -sinceDays) : null;
+
     const exactHits: SearchHit[] = [];
     const similarHits: SearchHit[] = [];
     const dates = Object.keys(data.meals).sort().reverse(); // 新しい順
 
     for (const date of dates) {
+      if (sinceKey != null && date < sinceKey) continue;
+      // 完全一致 + 類似の合計が maxResults に達したら早期終了（軽量動作のため）
+      if (exactHits.length + similarHits.length >= maxResults) break;
       const day = data.meals[date];
       if (!day) continue;
       const combined = day.lines.map((l) => l.text).join("\n");
@@ -57,6 +76,6 @@ export function useSearch(data: AppData, query: string): SearchHit[] {
     }
 
     // 完全一致を先、類似を後ろ（それぞれ日付降順は保持）
-    return [...exactHits, ...similarHits].slice(0, MAX_RESULTS);
-  }, [data, query]);
+    return [...exactHits, ...similarHits].slice(0, maxResults);
+  }, [data, query, sinceDays, maxResults]);
 }
