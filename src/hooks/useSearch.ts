@@ -5,26 +5,52 @@
  * マッチの種類：
  *  - exact: 正規化後の文字列がクエリをそのまま含む
  *  - similar: カタカナ部分に 2 文字以上の共通連続がある、または文字集合の重複率が高い
+ *
+ * options：
+ *  - sinceDays: 今日から N 日前までの meals に走査を限定する（省略時は全期間）
+ *  - maxResults: 返却する最大件数（省略時は 20）
+ * アクティブ行の件数バッジ用途では、sinceDays=365／maxResults を小さめに指定して
+ * 毎キーストロークの走査コストを抑える。
  */
 import { useMemo } from "react";
+import { addDaysKey, todayKey } from "../lib/date";
 import { extractKatakana, hasCommonSubstring, normalize } from "../lib/normalize";
-import type { AppData, SearchHit } from "../types";
+import type { AppData, DateKey, SearchHit } from "../types";
 
-const MAX_RESULTS = 20;
+const DEFAULT_MAX_RESULTS = 20;
 const SIMILAR_RATIO_THRESHOLD = 0.8;
 
-export function useSearch(data: AppData, query: string): SearchHit[] {
+export type SearchOptions = {
+  sinceDays?: number;
+  maxResults?: number;
+  /** 走査対象から除外する日付（編集中の行が自己マッチするのを防ぐ用途） */
+  excludeDate?: DateKey;
+};
+
+export function useSearch(data: AppData, query: string, options?: SearchOptions): SearchHit[] {
+  const sinceDays = options?.sinceDays;
+  const maxResults = options?.maxResults ?? DEFAULT_MAX_RESULTS;
+  const excludeDate = options?.excludeDate;
   return useMemo(() => {
     const q = query.trim();
     if (q === "") return [];
     const normalizedQuery = normalize(q);
     const queryKana = extractKatakana(normalizedQuery);
 
+    const sinceKey = sinceDays != null ? addDaysKey(todayKey(), -sinceDays) : null;
+
     const exactHits: SearchHit[] = [];
     const similarHits: SearchHit[] = [];
     const dates = Object.keys(data.meals).sort().reverse(); // 新しい順
 
     for (const date of dates) {
+      if (excludeDate != null && date === excludeDate) continue;
+      // dates は降順。sinceKey より古い日付に到達したら以降もすべて古いので打ち切る
+      if (sinceKey != null && date < sinceKey) break;
+      // 完全一致だけで上限に達したら打ち切る。
+      // 合計（完全+類似）で break すると、古い日付にある完全一致を取りこぼし
+      //「完全一致を先、類似を後ろ」の保証が崩れるため、完全一致のみを基準にする。
+      if (exactHits.length >= maxResults) break;
       const day = data.meals[date];
       if (!day) continue;
       const combined = day.lines.map((l) => l.text).join("\n");
@@ -57,6 +83,6 @@ export function useSearch(data: AppData, query: string): SearchHit[] {
     }
 
     // 完全一致を先、類似を後ろ（それぞれ日付降順は保持）
-    return [...exactHits, ...similarHits].slice(0, MAX_RESULTS);
-  }, [data, query]);
+    return [...exactHits, ...similarHits].slice(0, maxResults);
+  }, [data, query, sinceDays, maxResults, excludeDate]);
 }
