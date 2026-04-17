@@ -14,6 +14,8 @@ export type AppDataApi = {
   data: AppData;
   /** 1日分の献立テキストを更新（即時保存） */
   setMealsText: (date: DateKey, text: string) => void;
+  /** 1日分のちょいメモを更新（即時保存）。空文字は未設定扱い */
+  setMemo: (date: DateKey, text: string) => void;
   /** 1日分の完了トグル（行インデックス単位） */
   toggleLine: (date: DateKey, lineIndex: number) => void;
   /** 指定行だけを削除（他の行の完了・お気に入りは保持） */
@@ -28,6 +30,10 @@ export type AppDataApi = {
   decStock: (id: string) => void;
   /** ストック削除（qty が 0 のときにユーザーが明示的に 0 ボタンを押したら呼ぶ） */
   removeStock: (id: string) => void;
+  /** ストック項目を 1 つ上に移動（先頭は no-op） */
+  moveStockUp: (id: string) => void;
+  /** ストック項目を 1 つ下に移動（末尾は no-op） */
+  moveStockDown: (id: string) => void;
   /** 直前の setMealsText で週が満タンになった瞬間の日曜 DateKey（演出トリガー用）。永続化しない */
   justCompletedSunday: DateKey | null;
   /** 「頑張ったね」演出の終了時に呼ぶ */
@@ -43,7 +49,16 @@ function textToLines(text: string, previous: DayMeals | undefined): DayMeals {
     const done = prev && prev.text === raw ? prev.done : false;
     return { text: raw, done };
   });
-  return { lines };
+  const next: DayMeals = { lines };
+  if (previous?.memo) next.memo = previous.memo;
+  return next;
+}
+
+/** lines が実質空（長さ 0 か、1 行だけで空文字）か */
+function linesAreEmpty(lines: DayMeals["lines"]): boolean {
+  if (lines.length === 0) return true;
+  if (lines.length === 1 && lines[0]?.text === "") return true;
+  return false;
 }
 
 /**
@@ -52,6 +67,22 @@ function textToLines(text: string, previous: DayMeals | undefined): DayMeals {
  * （関数更新で必ず prev を経由するため）。
  */
 type State = { data: AppData; justCompletedSunday: DateKey | null };
+
+/** ストックの指定 id を delta 分（-1 で上、+1 で下）入れ替える。端では変化なし */
+function swapStock(prev: State, id: string, delta: -1 | 1): State {
+  const stock = prev.data.stock;
+  const idx = stock.findIndex((s) => s.id === id);
+  if (idx === -1) return prev;
+  const target = idx + delta;
+  if (target < 0 || target >= stock.length) return prev;
+  const next = stock.slice();
+  const a = next[idx];
+  const b = next[target];
+  if (!a || !b) return prev;
+  next[idx] = b;
+  next[target] = a;
+  return { ...prev, data: { ...prev.data, stock: next } };
+}
 
 export function useAppData(): AppDataApi {
   const [state, setState] = useState<State>(() => ({
@@ -69,7 +100,8 @@ export function useAppData(): AppDataApi {
       const nextDay = textToLines(text, prev.data.meals[date]);
       const isEmpty = nextDay.lines.every((l) => l.text === "" && !l.done);
       const nextMeals = { ...prev.data.meals };
-      if (isEmpty) {
+      // lines が空でも memo があれば日付は残す
+      if (isEmpty && !nextDay.memo) {
         delete nextMeals[date];
       } else {
         nextMeals[date] = nextDay;
@@ -83,6 +115,25 @@ export function useAppData(): AppDataApi {
         data: { ...prev.data, meals: nextMeals },
         justCompletedSunday,
       };
+    });
+  }, []);
+
+  const setMemo = useCallback((date: DateKey, text: string) => {
+    const trimmed = text;
+    setState((prev) => {
+      const current = prev.data.meals[date];
+      const lines = current?.lines ?? [];
+      const hasMemo = trimmed !== "";
+      const nextMeals = { ...prev.data.meals };
+      if (!hasMemo && linesAreEmpty(lines)) {
+        // メモも lines も空なら日付ごと除外
+        delete nextMeals[date];
+      } else {
+        const nextDay: DayMeals = { lines };
+        if (hasMemo) nextDay.memo = trimmed;
+        nextMeals[date] = nextDay;
+      }
+      return { ...prev, data: { ...prev.data, meals: nextMeals } };
     });
   }, []);
 
@@ -101,11 +152,13 @@ export function useAppData(): AppDataApi {
       const nextLines = day.lines.map((line, i) =>
         i === lineIndex ? { ...line, done: !line.done } : line,
       );
+      const nextDay: DayMeals = { lines: nextLines };
+      if (day.memo) nextDay.memo = day.memo;
       return {
         ...prev,
         data: {
           ...prev.data,
-          meals: { ...prev.data.meals, [date]: { lines: nextLines } },
+          meals: { ...prev.data.meals, [date]: nextDay },
         },
       };
     });
@@ -118,12 +171,14 @@ export function useAppData(): AppDataApi {
       if (lineIndex < 0 || lineIndex >= day.lines.length) return prev;
       const nextLines = day.lines.filter((_, i) => i !== lineIndex);
       const nextMeals = { ...prev.data.meals };
-      const nothingLeft =
-        nextLines.length === 0 || (nextLines.length === 1 && nextLines[0]?.text === "");
-      if (nothingLeft) {
+      const nothingLeft = linesAreEmpty(nextLines);
+      // lines が空でも memo があれば日付は残す
+      if (nothingLeft && !day.memo) {
         delete nextMeals[date];
       } else {
-        nextMeals[date] = { lines: nextLines };
+        const nextDay: DayMeals = { lines: nextLines };
+        if (day.memo) nextDay.memo = day.memo;
+        nextMeals[date] = nextDay;
       }
       return { ...prev, data: { ...prev.data, meals: nextMeals } };
     });
@@ -187,9 +242,18 @@ export function useAppData(): AppDataApi {
     }));
   }, []);
 
+  const moveStockUp = useCallback((id: string) => {
+    setState((prev) => swapStock(prev, id, -1));
+  }, []);
+
+  const moveStockDown = useCallback((id: string) => {
+    setState((prev) => swapStock(prev, id, 1));
+  }, []);
+
   return {
     data: state.data,
     setMealsText,
+    setMemo,
     toggleLine,
     deleteLine,
     toggleFavorite,
@@ -197,6 +261,8 @@ export function useAppData(): AppDataApi {
     incStock,
     decStock,
     removeStock,
+    moveStockUp,
+    moveStockDown,
     justCompletedSunday: state.justCompletedSunday,
     clearJustCompleted,
   };

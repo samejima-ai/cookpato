@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import emptyDayImg from "../assets/empty-day.png";
 import favoriteImg from "../assets/favorite.png";
 import weekMedalImg from "../assets/week-medal.png";
@@ -22,6 +22,8 @@ type Props = {
   onToggleLine: (lineIndex: number) => void;
   onToggleFavorite: (lineIndex: number) => void;
   onDeleteLine: (lineIndex: number) => void;
+  /** ちょいメモ（料理行とは別枠）の更新 */
+  onMemoChange: (text: string) => void;
 };
 
 export function DayRow({
@@ -35,6 +37,7 @@ export function DayRow({
   onToggleLine,
   onToggleFavorite,
   onDeleteLine,
+  onMemoChange,
 }: Props) {
   const [editing, setEditing] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<number | null>(null);
@@ -83,6 +86,7 @@ export function DayRow({
           <div className="text-xs text-red-500 mt-0.5 leading-tight">{holidayName}</div>
         )}
         {isToday && <div className="text-xs text-yellow-700 mt-0.5">今日</div>}
+        <MemoField dateKey={dateKey} value={day?.memo ?? ""} onChange={onMemoChange} />
       </div>
       <div className="flex-1 min-w-0">
         {editing ? (
@@ -352,4 +356,76 @@ function useDebouncedTap(
 function autoResize(el: HTMLTextAreaElement): void {
   el.style.height = "auto";
   el.style.height = `${el.scrollHeight}px`;
+}
+
+type MemoFieldProps = {
+  dateKey: DateKey;
+  value: string;
+  onChange: (text: string) => void;
+};
+
+/**
+ * ちょいメモ欄。料理行とは別枠の短文メモ。
+ * - 日付列（w-24 = 96px）内に収める
+ * - 実測した自然幅をもとに font-size を動的に縮小し、1 行で全文表示する
+ *   （Excel の「縮小して全体を表示」に相当。横スクロールを避ける）
+ * - 空のときは小さくプレースホルダ「メモ」のみ
+ * - 料理行の編集モードとは領域分離（stopPropagation）
+ */
+function MemoField({ dateKey, value, onChange }: MemoFieldProps) {
+  const BASE_PX = 14;
+  const EMPTY_PX = 10;
+  const MIN_PX = 8;
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const measureRef = useRef<HTMLSpanElement | null>(null);
+  const [fontPx, setFontPx] = useState<number>(value === "" ? EMPTY_PX : BASE_PX);
+
+  // value または container の幅が変わるたびに、コンテナ幅 ÷ 自然幅 で font-size を決める
+  useLayoutEffect(() => {
+    if (value === "") {
+      setFontPx(EMPTY_PX);
+      return;
+    }
+    const c = containerRef.current;
+    const m = measureRef.current;
+    if (!c || !m) return;
+    const cw = c.clientWidth;
+    const nw = m.scrollWidth;
+    if (cw === 0 || nw === 0) return;
+    if (nw <= cw) {
+      setFontPx(BASE_PX);
+    } else {
+      const scaled = Math.max(MIN_PX, Math.floor(BASE_PX * (cw / nw)));
+      setFontPx(scaled);
+    }
+  }, [value]);
+
+  return (
+    <div
+      ref={containerRef}
+      className="mt-0.5 relative w-full overflow-hidden"
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => e.stopPropagation()}
+    >
+      {/* 計測用：BASE_PX で描画したときの自然幅を得るための非表示要素。
+          レイアウトには影響させないため absolute + invisible。 */}
+      <span
+        ref={measureRef}
+        aria-hidden="true"
+        className="invisible absolute top-0 left-0 whitespace-pre italic"
+        style={{ fontSize: `${BASE_PX}px` }}
+      >
+        {value || "\u00A0"}
+      </span>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="メモ"
+        style={{ fontSize: `${fontPx}px` }}
+        className="w-full bg-transparent outline-none text-neutral-500 italic placeholder:text-neutral-300 placeholder:not-italic leading-tight py-0"
+        aria-label={`${formatDayLabel(dateKey)} のメモ`}
+      />
+    </div>
+  );
 }

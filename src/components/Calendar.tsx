@@ -203,6 +203,7 @@ export function Calendar({ api, scrollTarget }: Props) {
                   onToggleLine={(i) => api.toggleLine(date, i)}
                   onToggleFavorite={(i) => api.toggleFavorite(date, i)}
                   onDeleteLine={(i) => api.deleteLine(date, i)}
+                  onMemoChange={(text) => api.setMemo(date, text)}
                 />
               </div>
             </div>
