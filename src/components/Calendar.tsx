@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import weekCompleteImg from "../assets/week-complete.png";
+import weekMedalImg from "../assets/week-medal.png";
 import type { AppDataApi } from "../hooks/useAppData";
 import { computeCheerDates } from "../lib/cheer";
 import { addDaysKey, formatMonthHeader, isFirstOfMonth, isSameMonth, todayKey } from "../lib/date";
@@ -46,9 +47,9 @@ export function Calendar({ api, scrollTarget, onActiveQueryChange }: Props) {
     return headerHeightRef.current;
   }, []);
 
-  // 未来の空日に応援イラストを出す対象日集合（SPEC「空状態の応援表示」）
+  // 今日を含む 7 日の空日に応援イラストを出す（SPEC「空状態の応援表示」）
   const cheerDates = useMemo(
-    () => computeCheerDates(api.data.meals, today, INITIAL_SPAN),
+    () => computeCheerDates(api.data.meals, today),
     [api.data.meals, today],
   );
 
@@ -231,6 +232,17 @@ export function Calendar({ api, scrollTarget, onActiveQueryChange }: Props) {
           <span aria-hidden="true">{todayOffscreen === "above" ? "↑" : "↓"}</span>
           <span>今日</span>
         </button>
+      )}
+      {api.data.completedWeeks.length > 0 && (
+        <div
+          className="pointer-events-none absolute bottom-3 left-3 h-11 pl-1 pr-3 rounded-full bg-white/95 shadow-md border border-neutral-200 flex items-center gap-1"
+          aria-label={`達成週 ${api.data.completedWeeks.length} 回`}
+        >
+          <img src={weekMedalImg} alt="" aria-hidden="true" className="w-8 h-8 shrink-0" />
+          <span className="text-sm font-medium text-neutral-700 tabular-nums">
+            × {api.data.completedWeeks.length}
+          </span>
+        </div>
       )}
     </div>
   );
