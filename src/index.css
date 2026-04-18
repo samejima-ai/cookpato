@@ -74,3 +74,19 @@ input[type="search"] {
 .animate-week-complete {
   animation: week-complete-appear 3s ease-in-out forwards;
 }
+
+/* 行削除モード（長押しで突入）：iOS ホーム画面のぷるぷるモード相当。
+   行全体を微小角で揺らし「触れる状態」であることを示す。 */
+@keyframes row-wobble {
+  0%,
+  100% {
+    transform: rotate(-0.6deg);
+  }
+  50% {
+    transform: rotate(0.6deg);
+  }
+}
+.animate-row-wobble {
+  animation: row-wobble 0.28s ease-in-out infinite;
+  transform-origin: center;
+}

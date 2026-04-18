@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import emptyDayImg from "../assets/empty-day.png";
 import favoriteImg from "../assets/favorite.png";
 import weekMedalImg from "../assets/week-medal.png";
+import { useAutoShrink } from "../hooks/useAutoShrink";
+import { useLongPress } from "../hooks/useLongPress";
 import { formatDayLabel, isSaturday, isSunday } from "../lib/date";
 import { tapFeedback } from "../lib/haptics";
 import { getHolidayName } from "../lib/holidays";
@@ -49,7 +51,11 @@ export function DayRow({
 }: Props) {
   const [editing, setEditing] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<number | null>(null);
+  // 行削除モード（長押しで突入）中の対象行 index。null は非アクティブ。
+  // 同時に揺れる行は高々 1 本（iOS のぷるぷるモード相当）。
+  const [wobbleIndex, setWobbleIndex] = useState<number | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const wobbleRowRef = useRef<HTMLLIElement | null>(null);
   const lines = day?.lines ?? [];
   const rawText = lines.map((l) => l.text).join("\n");
 
@@ -68,6 +74,30 @@ export function DayRow({
   useEffect(() => {
     if (!editing) onActiveQueryChange?.("", dateKey);
   }, [editing, onActiveQueryChange, dateKey]);
+
+  // 編集モードに入ったら wobble は解除（重複表示の回避）
+  useEffect(() => {
+    if (editing) setWobbleIndex(null);
+  }, [editing]);
+
+  // wobble 中は「対象行の外をタップ」「ESC」で解除する
+  useEffect(() => {
+    if (wobbleIndex === null) return;
+    const onPointerDown = (e: PointerEvent) => {
+      const row = wobbleRowRef.current;
+      if (row?.contains(e.target as Node)) return;
+      setWobbleIndex(null);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setWobbleIndex(null);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [wobbleIndex]);
 
   function emitActiveLine(el: HTMLTextAreaElement): void {
     if (!onActiveQueryChange) return;
@@ -165,9 +195,15 @@ export function DayRow({
                       text={line.text}
                       done={line.done}
                       favorite={favoriteKeys.has(favoriteKey(line.text))}
+                      wobble={wobbleIndex === idx}
+                      rowRef={wobbleIndex === idx ? wobbleRowRef : undefined}
                       onToggle={() => onToggleLine(idx)}
                       onToggleFavorite={() => onToggleFavorite(idx)}
-                      onRequestDelete={() => setPendingDelete(idx)}
+                      onLongPress={() => setWobbleIndex(idx)}
+                      onRequestDelete={() => {
+                        setWobbleIndex(null);
+                        setPendingDelete(idx);
+                      }}
                     />
                   ),
                 )}
@@ -194,8 +230,14 @@ type LineItemProps = {
   text: string;
   done: boolean;
   favorite: boolean;
+  /** 削除モード（長押し突入）中か。true の間だけ ✕ ボタンを表示＋行を揺らす。 */
+  wobble: boolean;
+  /** wobble 中の外タップ判定用に親が渡す `<li>` 参照（wobble=false のときは未指定） */
+  rowRef?: React.Ref<HTMLLIElement>;
   onToggle: () => void;
   onToggleFavorite: () => void;
+  /** 料理名エリアを長押しされたとき。親は対応行を wobble 状態に遷移させる。 */
+  onLongPress: () => void;
   onRequestDelete: () => void;
 };
 
@@ -203,17 +245,29 @@ type LineItemProps = {
  * 1品の表示＋トグル/お気に入り/削除ボタン。
  *
  * 調理中操作の最適化（SPEC「完了トグル（品単位）」改訂）：
- * - ヒット領域：トグルボタンは行左 1/3 以上を占有（min-w-11 で 44px 下限）
- * - 視覚フィードバック 3 点併用：打ち消し線 + 文字色グレー + 行背景色
+ * - ヒット領域：トグル/お気に入り/削除ともに 44×44px（iOS HIG 下限）
+ *   （料理名の表示幅を最大化するため、以前の「行左 1/3 占有」は廃止）
+ * - 視覚フィードバック：文字色グレー + チェックボックスのグレー塗り
+ *   （完了行は静かに後退させ、未完了行との相対的なコントラストで識別）
+ * - 料理名は 1 行に自動縮小（MemoField と同じ `useAutoShrink`）
  * - タップ時 `tapFeedback()`（対応端末のみ、非対応は no-op）
  * - 300ms 以内の連続タップは 1 回として扱う（チャタリング防止）
+ *
+ * 行削除の UI：
+ * - ✕ ボタンは常時非表示（料理名の表示幅を最大化するため）
+ * - 料理名エリアを 500ms 長押しすると「削除モード（ぷるぷる）」に入り
+ *   ✕ が現れる。以降は従来の確認ダイアログ経由で削除
+ * - 削除モード中の外タップ / ESC で通常表示に戻る（親 `DayRow` が制御）
  */
 function LineItem({
   text,
   done,
   favorite,
+  wobble,
+  rowRef,
   onToggle,
   onToggleFavorite,
+  onLongPress,
   onRequestDelete,
 }: LineItemProps) {
   const handleToggle = useDebouncedTap((e: React.MouseEvent) => {
@@ -231,19 +285,30 @@ function LineItem({
     tapFeedback();
     onRequestDelete();
   };
+  const longPress = useLongPress(() => {
+    tapFeedback();
+    onLongPress();
+  });
 
-  const textClass = done ? "line-through text-neutral-400" : "text-neutral-800";
-  const rowBgClass = done ? "bg-green-50" : "";
+  const DISH_BASE_PX = 16;
+  const { containerRef, measureRef, fontPx } = useAutoShrink({
+    value: text,
+    basePx: DISH_BASE_PX,
+    minPx: 10,
+  });
+
+  const textClass = done ? "text-neutral-400" : "text-neutral-800";
   const checkboxClass = done
-    ? "bg-green-500 border-green-500 text-white"
+    ? "bg-neutral-400 border-neutral-400 text-white"
     : "border-neutral-300 bg-white";
+  const liClass = `flex items-stretch min-h-11 rounded ${wobble ? "animate-row-wobble" : ""}`;
 
   return (
-    <li className={`flex items-stretch min-h-11 rounded ${rowBgClass}`}>
+    <li ref={rowRef} className={liClass}>
       <button
         type="button"
         onClick={handleToggle}
-        className="w-1/3 min-w-11 flex items-center px-1 shrink-0"
+        className="w-11 flex items-center justify-center shrink-0"
         aria-label={done ? "未完了に戻す" : "完了にする"}
         aria-pressed={done}
       >
@@ -253,9 +318,27 @@ function LineItem({
           {done ? "✓" : ""}
         </span>
       </button>
-      <span className={`flex-1 self-center text-base leading-7 break-words ${textClass}`}>
-        {text}
-      </span>
+      <div
+        ref={containerRef}
+        className="flex-1 min-w-0 self-center relative overflow-hidden"
+        {...longPress}
+      >
+        {/* 計測用：BASE_PX で描画したときの自然幅を得るための非表示要素 */}
+        <span
+          ref={measureRef}
+          aria-hidden="true"
+          className="invisible absolute top-0 left-0 whitespace-nowrap"
+          style={{ fontSize: `${DISH_BASE_PX}px` }}
+        >
+          {text}
+        </span>
+        <span
+          style={{ fontSize: `${fontPx}px` }}
+          className={`block whitespace-nowrap overflow-hidden leading-7 ${textClass}`}
+        >
+          {text}
+        </span>
+      </div>
       <button
         type="button"
         onClick={handleFavorite}
@@ -269,14 +352,16 @@ function LineItem({
           <span className="w-5 h-5 text-neutral-300 text-base leading-none">♡</span>
         )}
       </button>
-      <button
-        type="button"
-        onClick={handleDelete}
-        className="w-11 h-11 flex items-center justify-center shrink-0 text-neutral-300 active:text-red-500 text-lg"
-        aria-label={`${text} を削除`}
-      >
-        ✕
-      </button>
+      {wobble && (
+        <button
+          type="button"
+          onClick={handleDelete}
+          className="w-11 h-11 flex items-center justify-center shrink-0 text-neutral-300 active:text-red-500 text-lg"
+          aria-label={`${text} を削除`}
+        >
+          ✕
+        </button>
+      )}
     </li>
   );
 }
@@ -410,31 +495,12 @@ type MemoFieldProps = {
  */
 function MemoField({ dateKey, value, onChange }: MemoFieldProps) {
   const BASE_PX = 14;
-  const EMPTY_PX = 10;
-  const MIN_PX = 8;
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const measureRef = useRef<HTMLSpanElement | null>(null);
-  const [fontPx, setFontPx] = useState<number>(value === "" ? EMPTY_PX : BASE_PX);
-
-  // value または container の幅が変わるたびに、コンテナ幅 ÷ 自然幅 で font-size を決める
-  useLayoutEffect(() => {
-    if (value === "") {
-      setFontPx(EMPTY_PX);
-      return;
-    }
-    const c = containerRef.current;
-    const m = measureRef.current;
-    if (!c || !m) return;
-    const cw = c.clientWidth;
-    const nw = m.scrollWidth;
-    if (cw === 0 || nw === 0) return;
-    if (nw <= cw) {
-      setFontPx(BASE_PX);
-    } else {
-      const scaled = Math.max(MIN_PX, Math.floor(BASE_PX * (cw / nw)));
-      setFontPx(scaled);
-    }
-  }, [value]);
+  const { containerRef, measureRef, fontPx } = useAutoShrink({
+    value,
+    basePx: BASE_PX,
+    minPx: 8,
+    emptyPx: 10,
+  });
 
   return (
     <div
