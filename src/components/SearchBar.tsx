@@ -21,7 +21,7 @@ export function SearchBar({
 }: Props) {
   const ime = useComposition();
   function handle(e: ChangeEvent<HTMLInputElement>) {
-    if (ime.isComposing(e.nativeEvent)) return;
+    if (ime.shouldSkipChange(e.target.value, e.nativeEvent)) return;
     onChange(e.target.value);
   }
   // 検索欄が空（空白のみを含む）かつ 件数 > 0 かつ タップハンドラが渡されているときだけ
@@ -51,7 +51,9 @@ export function SearchBar({
         onCompositionStart={ime.onCompositionStart}
         onCompositionEnd={(e) => {
           ime.onCompositionEnd();
-          onChange(e.currentTarget.value);
+          const committed = e.currentTarget.value;
+          ime.markCommitted(committed);
+          onChange(committed);
         }}
         onChange={handle}
         placeholder="過去の献立を検索"

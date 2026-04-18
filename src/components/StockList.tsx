@@ -138,10 +138,12 @@ export function StockList({ api }: Props) {
               onCompositionStart={nameIme.onCompositionStart}
               onCompositionEnd={(e) => {
                 nameIme.onCompositionEnd();
-                setDraftName(e.currentTarget.value);
+                const committed = e.currentTarget.value;
+                nameIme.markCommitted(committed);
+                setDraftName(committed);
               }}
               onChange={(e) => {
-                if (nameIme.isComposing(e.nativeEvent)) return;
+                if (nameIme.shouldSkipChange(e.target.value, e.nativeEvent)) return;
                 setDraftName(e.target.value);
               }}
               onKeyDown={(e) => {

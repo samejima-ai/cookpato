@@ -357,6 +357,49 @@ describe("DayRow", () => {
       fireEvent.change(memo, { target: { value: "ソソ" } });
       expect(onMemoChange).not.toHaveBeenCalled();
     });
+
+    // ブラウザによっては compositionend 直後に同値の input/change が続く。
+    // compositionEnd 側で確定反映しているので、直後の同値 change は 1 回だけ捨てる。
+    it("textarea: compositionEnd 直後の同値 change は onTextChange を二重に呼ばない", () => {
+      const onTextChange = vi.fn();
+      render(<DayRow {...baseProps()} onTextChange={onTextChange} />);
+      fireEvent.click(screen.getByLabelText(/4月15日.*献立を編集/));
+      const textarea = screen
+        .queryAllByRole("textbox")
+        .find((el) => el.tagName === "TEXTAREA") as HTMLTextAreaElement;
+      if (!textarea) throw new Error("textarea not found");
+
+      fireEvent.compositionStart(textarea);
+      fireEvent.change(textarea, { target: { value: "タ" } });
+      textarea.value = "タ";
+      fireEvent.compositionEnd(textarea);
+      // compositionEnd と同値の change が続いて発火するケース
+      fireEvent.change(textarea, { target: { value: "タ" } });
+
+      expect(onTextChange).toHaveBeenCalledTimes(1);
+      expect(onTextChange).toHaveBeenLastCalledWith("タ");
+    });
+
+    it("textarea: compositionEnd 後に異なる値の change が来たら反映する", () => {
+      const onTextChange = vi.fn();
+      render(<DayRow {...baseProps()} onTextChange={onTextChange} />);
+      fireEvent.click(screen.getByLabelText(/4月15日.*献立を編集/));
+      const textarea = screen
+        .queryAllByRole("textbox")
+        .find((el) => el.tagName === "TEXTAREA") as HTMLTextAreaElement;
+      if (!textarea) throw new Error("textarea not found");
+
+      fireEvent.compositionStart(textarea);
+      fireEvent.change(textarea, { target: { value: "タ" } });
+      textarea.value = "タ";
+      fireEvent.compositionEnd(textarea);
+      // dedupe は「次の同値 1 回」のみ。異なる値の change は反映される。
+      fireEvent.change(textarea, { target: { value: "タa" } });
+
+      expect(onTextChange).toHaveBeenCalledTimes(2);
+      expect(onTextChange).toHaveBeenNthCalledWith(1, "タ");
+      expect(onTextChange).toHaveBeenNthCalledWith(2, "タa");
+    });
   });
 
   describe("週達成マーカー（廃止）と編集コミット連携", () => {

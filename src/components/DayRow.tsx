@@ -145,13 +145,16 @@ export function DayRow({
             onCompositionEnd={(e) => {
               ime.onCompositionEnd();
               // compositionEnd の最終確定値を明示反映する（iOS Safari では
-              // compositionEnd 後の onChange が発火しない経路があるため）
-              onTextChange(e.currentTarget.value);
+              // compositionEnd 後の onChange が発火しない経路があるため）。
+              // 他ブラウザでは直後に同値の onChange が続くため markCommitted で 1 回抑止する。
+              const committed = e.currentTarget.value;
+              ime.markCommitted(committed);
+              onTextChange(committed);
               autoResize(e.currentTarget);
               emitActiveLine(e.currentTarget);
             }}
             onChange={(e) => {
-              if (ime.isComposing(e.nativeEvent)) return;
+              if (ime.shouldSkipChange(e.target.value, e.nativeEvent)) return;
               onTextChange(e.target.value);
               autoResize(e.target);
               emitActiveLine(e.target);
@@ -536,10 +539,12 @@ function MemoField({ dateKey, value, onChange }: MemoFieldProps) {
         onCompositionStart={ime.onCompositionStart}
         onCompositionEnd={(e) => {
           ime.onCompositionEnd();
-          onChange(e.currentTarget.value);
+          const committed = e.currentTarget.value;
+          ime.markCommitted(committed);
+          onChange(committed);
         }}
         onChange={(e) => {
-          if (ime.isComposing(e.nativeEvent)) return;
+          if (ime.shouldSkipChange(e.target.value, e.nativeEvent)) return;
           onChange(e.target.value);
         }}
         placeholder="メモ"
