@@ -218,7 +218,7 @@ export function Calendar({ api, scrollTarget, onActiveQueryChange }: Props) {
             src={weekCompleteImg}
             alt=""
             aria-hidden="true"
-            className="w-screen h-screen object-contain drop-shadow"
+            className="w-screen max-w-xl h-auto drop-shadow"
           />
         </div>
       )}
