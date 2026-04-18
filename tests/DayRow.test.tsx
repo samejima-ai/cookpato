@@ -183,4 +183,48 @@ describe("DayRow", () => {
       expect(screen.queryByRole("dialog")).toBeNull();
     });
   });
+
+  // 完了行は「静かに後退」させる方針（SPEC「調理中操作の最適化」改訂）。
+  // ここは以前の 3 点併用（打ち消し線 + 行背景 + 緑塗り）へのリグレッションを
+  // 防ぐのが目的なので、例外的に className を直接検査している。
+  describe("完了行の視覚スタイル簡素化", () => {
+    it("完了行の料理名に line-through が付かない", () => {
+      render(<DayRow {...baseProps()} day={makeDay([{ text: "豚バラ大根", done: true }])} />);
+      const toggle = screen.getByRole("button", { name: /未完了に戻す/ });
+      const li = toggle.closest("li");
+      if (!li) throw new Error("li not found");
+      // 料理名を載せる span（block + whitespace-nowrap が付いた可視要素）
+      const dishSpan = li.querySelector("div > span.block");
+      if (!dishSpan) throw new Error("dish span not found");
+      expect(dishSpan.className).not.toMatch(/line-through/);
+      expect(dishSpan.className).toMatch(/text-neutral-400/);
+    });
+
+    it("完了行の <li> に bg-green-50 が付かない", () => {
+      render(<DayRow {...baseProps()} day={makeDay([{ text: "豚バラ大根", done: true }])} />);
+      const toggle = screen.getByRole("button", { name: /未完了に戻す/ });
+      const li = toggle.closest("li");
+      if (!li) throw new Error("li not found");
+      expect(li.className).not.toMatch(/bg-green-50/);
+    });
+
+    it("完了チェックはグレー塗り（bg-neutral-400）で、緑塗り（bg-green-500）は付かない", () => {
+      render(<DayRow {...baseProps()} day={makeDay([{ text: "豚バラ大根", done: true }])} />);
+      const toggle = screen.getByRole("button", { name: /未完了に戻す/ });
+      const checkbox = toggle.querySelector("span");
+      if (!checkbox) throw new Error("checkbox span not found");
+      expect(checkbox.className).toMatch(/bg-neutral-400/);
+      expect(checkbox.className).toMatch(/border-neutral-400/);
+      expect(checkbox.className).not.toMatch(/bg-green-500/);
+    });
+
+    it("未完了行のチェックは白地（bg-white）のまま", () => {
+      render(<DayRow {...baseProps()} day={makeDay([{ text: "カレー" }])} />);
+      const toggle = screen.getByRole("button", { name: /完了にする/ });
+      const checkbox = toggle.querySelector("span");
+      if (!checkbox) throw new Error("checkbox span not found");
+      expect(checkbox.className).toMatch(/bg-white/);
+      expect(checkbox.className).not.toMatch(/bg-neutral-400/);
+    });
+  });
 });

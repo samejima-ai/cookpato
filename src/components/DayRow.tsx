@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import emptyDayImg from "../assets/empty-day.png";
 import favoriteImg from "../assets/favorite.png";
 import weekMedalImg from "../assets/week-medal.png";
+import { useAutoShrink } from "../hooks/useAutoShrink";
 import { formatDayLabel, isSaturday, isSunday } from "../lib/date";
 import { tapFeedback } from "../lib/haptics";
 import { getHolidayName } from "../lib/holidays";
@@ -204,7 +205,9 @@ type LineItemProps = {
  *
  * 調理中操作の最適化（SPEC「完了トグル（品単位）」改訂）：
  * - ヒット領域：トグルボタンは行左 1/3 以上を占有（min-w-11 で 44px 下限）
- * - 視覚フィードバック 3 点併用：打ち消し線 + 文字色グレー + 行背景色
+ * - 視覚フィードバック：文字色グレー + チェックボックスのグレー塗り
+ *   （完了行は静かに後退させ、未完了行との相対的なコントラストで識別）
+ * - 料理名は 1 行に自動縮小（MemoField と同じ `useAutoShrink`）
  * - タップ時 `tapFeedback()`（対応端末のみ、非対応は no-op）
  * - 300ms 以内の連続タップは 1 回として扱う（チャタリング防止）
  */
@@ -232,14 +235,20 @@ function LineItem({
     onRequestDelete();
   };
 
-  const textClass = done ? "line-through text-neutral-400" : "text-neutral-800";
-  const rowBgClass = done ? "bg-green-50" : "";
+  const DISH_BASE_PX = 16;
+  const { containerRef, measureRef, fontPx } = useAutoShrink({
+    value: text,
+    basePx: DISH_BASE_PX,
+    minPx: 10,
+  });
+
+  const textClass = done ? "text-neutral-400" : "text-neutral-800";
   const checkboxClass = done
-    ? "bg-green-500 border-green-500 text-white"
+    ? "bg-neutral-400 border-neutral-400 text-white"
     : "border-neutral-300 bg-white";
 
   return (
-    <li className={`flex items-stretch min-h-11 rounded ${rowBgClass}`}>
+    <li className="flex items-stretch min-h-11 rounded">
       <button
         type="button"
         onClick={handleToggle}
@@ -253,9 +262,23 @@ function LineItem({
           {done ? "✓" : ""}
         </span>
       </button>
-      <span className={`flex-1 self-center text-base leading-7 break-words ${textClass}`}>
-        {text}
-      </span>
+      <div ref={containerRef} className="flex-1 self-center relative overflow-hidden">
+        {/* 計測用：BASE_PX で描画したときの自然幅を得るための非表示要素 */}
+        <span
+          ref={measureRef}
+          aria-hidden="true"
+          className="invisible absolute top-0 left-0 whitespace-pre"
+          style={{ fontSize: `${DISH_BASE_PX}px` }}
+        >
+          {text}
+        </span>
+        <span
+          style={{ fontSize: `${fontPx}px` }}
+          className={`block whitespace-nowrap overflow-hidden leading-7 ${textClass}`}
+        >
+          {text}
+        </span>
+      </div>
       <button
         type="button"
         onClick={handleFavorite}
@@ -410,31 +433,12 @@ type MemoFieldProps = {
  */
 function MemoField({ dateKey, value, onChange }: MemoFieldProps) {
   const BASE_PX = 14;
-  const EMPTY_PX = 10;
-  const MIN_PX = 8;
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const measureRef = useRef<HTMLSpanElement | null>(null);
-  const [fontPx, setFontPx] = useState<number>(value === "" ? EMPTY_PX : BASE_PX);
-
-  // value または container の幅が変わるたびに、コンテナ幅 ÷ 自然幅 で font-size を決める
-  useLayoutEffect(() => {
-    if (value === "") {
-      setFontPx(EMPTY_PX);
-      return;
-    }
-    const c = containerRef.current;
-    const m = measureRef.current;
-    if (!c || !m) return;
-    const cw = c.clientWidth;
-    const nw = m.scrollWidth;
-    if (cw === 0 || nw === 0) return;
-    if (nw <= cw) {
-      setFontPx(BASE_PX);
-    } else {
-      const scaled = Math.max(MIN_PX, Math.floor(BASE_PX * (cw / nw)));
-      setFontPx(scaled);
-    }
-  }, [value]);
+  const { containerRef, measureRef, fontPx } = useAutoShrink({
+    value,
+    basePx: BASE_PX,
+    minPx: 8,
+    emptyPx: 10,
+  });
 
   return (
     <div
