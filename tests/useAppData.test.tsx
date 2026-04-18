@@ -464,56 +464,202 @@ describe("useAppData", () => {
     });
   });
 
-  describe("週達成の遷移トリガー", () => {
+  describe("週達成のコミット時トリガーと累積カウント", () => {
     // 2026-04-12 は日曜、2026-04-18 は土曜
     const SUN = "2026-04-12";
     const WEEK = [SUN, "2026-04-13", "2026-04-14", "2026-04-15", "2026-04-16", "2026-04-17"];
     const SAT = "2026-04-18";
+    const ALL = [...WEEK, SAT];
 
-    it("初期は justCompletedSunday が null", () => {
+    it("初期は justCompletedSunday が null、completedWeeks は空", () => {
       const { result } = renderHook(() => useAppData());
       expect(result.current.justCompletedSunday).toBeNull();
+      expect(result.current.data.completedWeeks).toEqual([]);
     });
 
-    it("最後の1日を埋めて満タンになった瞬間にその週の日曜がセットされる", () => {
+    it("setMealsText だけでは演出もカウントも発火しない（キーストローク中は静か）", () => {
       const { result } = renderHook(() => useAppData());
+      act(() => {
+        for (const d of ALL) result.current.setMealsText(d, "x");
+      });
+      expect(result.current.justCompletedSunday).toBeNull();
+      expect(result.current.data.completedWeeks).toEqual([]);
+    });
+
+    /** SAT を埋めて commit までを実 UX の流れで実行（beginEdit → setMealsText → commitEdit） */
+    function completeWeekViaCommit(result: { current: ReturnType<typeof useAppData> }): void {
       act(() => {
         for (const d of WEEK) result.current.setMealsText(d, "x");
       });
-      expect(result.current.justCompletedSunday).toBeNull();
+      act(() => {
+        result.current.beginMealsEdit(SAT);
+      });
       act(() => {
         result.current.setMealsText(SAT, "x");
       });
-      expect(result.current.justCompletedSunday).toBe(SUN);
-    });
-
-    it("既に満タンの週を再編集しても再トリガーしない", () => {
-      const { result } = renderHook(() => useAppData());
       act(() => {
-        for (const d of [...WEEK, SAT]) result.current.setMealsText(d, "x");
+        result.current.commitMealsEdit(SAT);
+      });
+    }
+
+    it("commitMealsEdit で初めて未達成→達成遷移が確定し、カウントに加算される", () => {
+      const { result } = renderHook(() => useAppData());
+      // 6 日入れる
+      act(() => {
+        for (const d of WEEK) result.current.setMealsText(d, "x");
+      });
+      // 土曜の編集モードに入って baseline を取る（この時点で SAT は未充填）
+      act(() => {
+        result.current.beginMealsEdit(SAT);
+      });
+      // 1 文字入力時点ではまだ発火しない
+      act(() => {
+        result.current.setMealsText(SAT, "x");
+      });
+      expect(result.current.justCompletedSunday).toBeNull();
+      expect(result.current.data.completedWeeks).toEqual([]);
+      // blur で commit → ここで発火
+      act(() => {
+        result.current.commitMealsEdit(SAT);
       });
       expect(result.current.justCompletedSunday).toBe(SUN);
+      expect(result.current.data.completedWeeks).toEqual([SUN]);
+    });
+
+    it("commit 後に同じ週を再編集して再 commit してもカウントは重複加算されない", () => {
+      const { result } = renderHook(() => useAppData());
+      completeWeekViaCommit(result);
+      expect(result.current.data.completedWeeks).toEqual([SUN]);
       act(() => {
         result.current.clearJustCompleted();
       });
-      expect(result.current.justCompletedSunday).toBeNull();
-      // 既に満タンの週を再編集
+      // 同じ週を編集
+      act(() => {
+        result.current.beginMealsEdit(SAT);
+      });
       act(() => {
         result.current.setMealsText(SAT, "y");
       });
+      act(() => {
+        result.current.commitMealsEdit(SAT);
+      });
       expect(result.current.justCompletedSunday).toBeNull();
+      expect(result.current.data.completedWeeks).toEqual([SUN]);
     });
 
-    it("clearJustCompleted で null に戻せる", () => {
+    it("達成済み週の日を空にしてもカウントは減らない", () => {
       const { result } = renderHook(() => useAppData());
+      completeWeekViaCommit(result);
+      expect(result.current.data.completedWeeks).toEqual([SUN]);
+      // 土曜の中身を消す（実 UX の流れ）
       act(() => {
-        for (const d of [...WEEK, SAT]) result.current.setMealsText(d, "x");
+        result.current.beginMealsEdit(SAT);
       });
+      act(() => {
+        result.current.setMealsText(SAT, "");
+      });
+      act(() => {
+        result.current.commitMealsEdit(SAT);
+      });
+      // カウントは減らない
+      expect(result.current.data.completedWeeks).toEqual([SUN]);
+    });
+
+    it("達成済み週を空にして再充填して commit しても演出は出ない＆カウント変化なし", () => {
+      const { result } = renderHook(() => useAppData());
+      completeWeekViaCommit(result);
+      act(() => {
+        result.current.clearJustCompleted();
+      });
+      // 空にする
+      act(() => {
+        result.current.beginMealsEdit(SAT);
+      });
+      act(() => {
+        result.current.setMealsText(SAT, "");
+      });
+      act(() => {
+        result.current.commitMealsEdit(SAT);
+      });
+      // 再充填
+      act(() => {
+        result.current.beginMealsEdit(SAT);
+      });
+      act(() => {
+        result.current.setMealsText(SAT, "z");
+      });
+      act(() => {
+        result.current.commitMealsEdit(SAT);
+      });
+      expect(result.current.justCompletedSunday).toBeNull();
+      expect(result.current.data.completedWeeks).toEqual([SUN]);
+    });
+
+    it("別週を達成すると count = 2、justCompletedSunday は新しい週の日曜", () => {
+      // 翌週：2026-04-19 (日) 〜 2026-04-25 (土)
+      const SUN2 = "2026-04-19";
+      const WEEK2 = [SUN2, "2026-04-20", "2026-04-21", "2026-04-22", "2026-04-23", "2026-04-24"];
+      const SAT2 = "2026-04-25";
+      const { result } = renderHook(() => useAppData());
+      completeWeekViaCommit(result);
+      act(() => {
+        result.current.clearJustCompleted();
+      });
+      expect(result.current.data.completedWeeks).toEqual([SUN]);
+      // 翌週を埋めて commit
+      act(() => {
+        for (const d of WEEK2) result.current.setMealsText(d, "x");
+      });
+      act(() => {
+        result.current.beginMealsEdit(SAT2);
+      });
+      act(() => {
+        result.current.setMealsText(SAT2, "x");
+      });
+      act(() => {
+        result.current.commitMealsEdit(SAT2);
+      });
+      expect(result.current.justCompletedSunday).toBe(SUN2);
+      expect(result.current.data.completedWeeks).toEqual([SUN, SUN2]);
+    });
+
+    it("clearJustCompleted で null に戻せる（completedWeeks は維持）", () => {
+      const { result } = renderHook(() => useAppData());
+      completeWeekViaCommit(result);
       expect(result.current.justCompletedSunday).toBe(SUN);
       act(() => {
         result.current.clearJustCompleted();
       });
       expect(result.current.justCompletedSunday).toBeNull();
+      expect(result.current.data.completedWeeks).toEqual([SUN]);
+    });
+
+    it("既存 JSON（completedWeeks 無し）を loadData すると過去の既達成週が遡及カウントされる", () => {
+      const legacy = {
+        version: 1,
+        meals: Object.fromEntries(ALL.map((d) => [d, { lines: [{ text: "x", done: false }] }])),
+        stock: [],
+        favorites: [],
+        // completedWeeks 無し
+      };
+      localStorage.setItem("cookpato:data:v1", JSON.stringify(legacy));
+      const { result } = renderHook(() => useAppData());
+      // 起動時に過去の既達成週が認識される
+      expect(result.current.data.completedWeeks).toEqual([SUN]);
+    });
+
+    it("baseline が無い状態でも commitMealsEdit は安全（no-op）", () => {
+      const { result } = renderHook(() => useAppData());
+      act(() => {
+        for (const d of ALL) result.current.setMealsText(d, "x");
+      });
+      // begin を呼ばずに commit
+      act(() => {
+        result.current.commitMealsEdit(SAT);
+      });
+      // baseline が prev.data.meals にフォールバック → wasComplete = nowComplete = true → 何も起きない
+      expect(result.current.justCompletedSunday).toBeNull();
+      expect(result.current.data.completedWeeks).toEqual([]);
     });
   });
 });

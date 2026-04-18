@@ -3,7 +3,6 @@ import weekCompleteImg from "../assets/week-complete.png";
 import type { AppDataApi } from "../hooks/useAppData";
 import { computeCheerDates } from "../lib/cheer";
 import { addDaysKey, formatMonthHeader, isFirstOfMonth, isSameMonth, todayKey } from "../lib/date";
-import { computeCompleteWeekSundays } from "../lib/week";
 import type { DateKey } from "../types";
 import { DayRow } from "./DayRow";
 
@@ -55,12 +54,6 @@ export function Calendar({ api, scrollTarget, onActiveQueryChange }: Props) {
 
   // お気に入りは正規化テキスト集合として保持されているので Set に変換して渡す
   const favoriteKeys = useMemo(() => new Set(api.data.favorites), [api.data.favorites]);
-
-  // 満タン達成済みの週（日曜キー集合）。日曜行に常駐アイコンを出すため
-  const completeWeekSundays = useMemo(
-    () => computeCompleteWeekSundays(api.data.meals, range.start, range.end),
-    [api.data.meals, range.start, range.end],
-  );
 
   // 「頑張ったね」演出：justCompletedSunday がセットされたら 3 秒後に自動クリア
   useEffect(() => {
@@ -199,7 +192,6 @@ export function Calendar({ api, scrollTarget, onActiveQueryChange }: Props) {
                   day={api.data.meals[date]}
                   isToday={date === today}
                   showCheer={cheerDates.has(date)}
-                  showWeekComplete={completeWeekSundays.has(date)}
                   favoriteKeys={favoriteKeys}
                   onTextChange={(text) => api.setMealsText(date, text)}
                   onToggleLine={(i) => api.toggleLine(date, i)}
@@ -207,6 +199,8 @@ export function Calendar({ api, scrollTarget, onActiveQueryChange }: Props) {
                   onDeleteLine={(i) => api.deleteLine(date, i)}
                   onMemoChange={(text) => api.setMemo(date, text)}
                   onActiveQueryChange={onActiveQueryChange}
+                  onBeginEdit={() => api.beginMealsEdit(date)}
+                  onCommitEdit={() => api.commitMealsEdit(date)}
                 />
               </div>
             </div>
@@ -219,7 +213,12 @@ export function Calendar({ api, scrollTarget, onActiveQueryChange }: Props) {
           aria-live="polite"
           aria-label="今週の献立が埋まりました"
         >
-          <img src={weekCompleteImg} alt="" aria-hidden="true" className="w-40 h-40 drop-shadow" />
+          <img
+            src={weekCompleteImg}
+            alt=""
+            aria-hidden="true"
+            className="w-[min(85vw,85vh)] h-[min(85vw,85vh)] drop-shadow"
+          />
         </div>
       )}
       {todayOffscreen && (

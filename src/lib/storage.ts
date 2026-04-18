@@ -2,7 +2,8 @@
  * localStorage ラッパー。単一キー "cookpato:data:v1" に AppData を JSON で保存。
  * 読み書きエラーは黙って初期値を返す（単一ユーザー・シンプル運用のため）。
  */
-import type { AppData, DayMeals, StockItem } from "../types";
+import type { AppData, DateKey, DayMeals, StockItem } from "../types";
+import { computeAllCompleteWeekSundays } from "./week";
 
 const STORAGE_KEY = "cookpato:data:v1";
 
@@ -12,6 +13,7 @@ function initialData(): AppData {
     meals: {},
     stock: [],
     favorites: [],
+    completedWeeks: [],
   };
 }
 
@@ -27,15 +29,29 @@ export function loadData(): AppData {
       ? parsed.favorites.filter((v): v is string => typeof v === "string")
       : [];
     const meals = coerceMeals(parsed.meals);
+    const stored = Array.isArray(parsed.completedWeeks)
+      ? parsed.completedWeeks.filter((v): v is string => typeof v === "string")
+      : [];
+    // 既存ユーザー遡及：保存値と現在の meals から導出した既達成週を union する。
+    // これでマイグレーション時に過去の頑張りが自動的にカウントへ反映される。
+    const completedWeeks = unionSorted(stored, computeAllCompleteWeekSundays(meals));
     return {
       version: 1,
       meals,
       stock,
       favorites,
+      completedWeeks,
     };
   } catch {
     return initialData();
   }
+}
+
+function unionSorted(a: DateKey[], b: DateKey[]): DateKey[] {
+  const set = new Set<DateKey>();
+  for (const v of a) set.add(v);
+  for (const v of b) set.add(v);
+  return Array.from(set).sort();
 }
 
 /** 安全に保存する（例外は握りつぶす） */
@@ -47,7 +63,13 @@ export function saveData(data: AppData): void {
   }
 }
 
-type BaseShape = { version: 1; meals: object; stock: unknown[]; favorites?: unknown };
+type BaseShape = {
+  version: 1;
+  meals: object;
+  stock: unknown[];
+  favorites?: unknown;
+  completedWeeks?: unknown;
+};
 
 function isBaseShape(v: unknown): v is BaseShape {
   if (typeof v !== "object" || v === null) return false;

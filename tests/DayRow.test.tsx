@@ -37,7 +37,6 @@ function baseProps() {
     day: undefined as DayMeals | undefined,
     isToday: false,
     showCheer: false,
-    showWeekComplete: false,
     favoriteKeys: new Set<string>(),
     onTextChange: () => {},
     onToggleLine: () => {},
@@ -301,6 +300,38 @@ describe("DayRow", () => {
       if (!checkbox) throw new Error("checkbox span not found");
       expect(checkbox.className).toMatch(/bg-white/);
       expect(checkbox.className).not.toMatch(/bg-neutral-400/);
+    });
+  });
+
+  describe("週達成マーカー（廃止）と編集コミット連携", () => {
+    it("日曜行に週達成メダルアイコンが描画されない（常駐マーカー廃止）", () => {
+      // 2026-04-12 は日曜
+      render(<DayRow {...baseProps()} dateKey="2026-04-12" />);
+      // 旧実装で付いていた title 属性が無いこと
+      expect(screen.queryByTitle("この週の献立が埋まりました")).toBeNull();
+    });
+
+    it("編集モード進入で onBeginEdit が呼ばれ、onCommitEdit はまだ呼ばれない", () => {
+      const onBeginEdit = vi.fn();
+      const onCommitEdit = vi.fn();
+      render(<DayRow {...baseProps()} onBeginEdit={onBeginEdit} onCommitEdit={onCommitEdit} />);
+      const trigger = screen.getByLabelText(/4月15日.*献立を編集/);
+      fireEvent.click(trigger);
+      expect(onBeginEdit).toHaveBeenCalledTimes(1);
+      expect(onCommitEdit).not.toHaveBeenCalled();
+    });
+
+    it("textarea の onChange では onCommitEdit が呼ばれない、onBlur で初めて呼ばれる", () => {
+      const onCommitEdit = vi.fn();
+      render(<DayRow {...baseProps()} onCommitEdit={onCommitEdit} />);
+      const trigger = screen.getByLabelText(/4月15日.*献立を編集/);
+      fireEvent.click(trigger);
+      const textarea = screen.queryAllByRole("textbox").find((el) => el.tagName === "TEXTAREA");
+      if (!textarea) throw new Error("textarea not found");
+      fireEvent.change(textarea, { target: { value: "な" } });
+      expect(onCommitEdit).not.toHaveBeenCalled();
+      fireEvent.blur(textarea);
+      expect(onCommitEdit).toHaveBeenCalledTimes(1);
     });
   });
 });
