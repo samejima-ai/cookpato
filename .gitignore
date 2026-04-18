@@ -5,3 +5,6 @@ coverage
 .DS_Store
 *.log
 .vite
+
+# MCP Chrome DevTools E2E 検証成果物
+test-*.png
