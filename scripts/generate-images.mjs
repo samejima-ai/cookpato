@@ -84,8 +84,10 @@ async function main() {
   // お気に入りアイコン（行内表示用、表示は CSS で 24px に縮小）
   await makeTransparent("shimaenaga-heart.png", "favorite.png", 80);
 
-  // 週達成時の演出オーバーレイ（満タン遷移時に中央に出る「頑張ったね」）
-  await makeTransparent("shimaenaga-ganbattane.png", "week-complete.png", 160);
+  // 週達成時の演出オーバーレイ（満タン遷移時に中央に出る「頑張ったね」）。
+  // 画面短辺（iPhone 論理 390-430px 想定）× DPR 3 = 1290px を超えるよう 1600 で出す。
+  // 元画像 2048x2048 正方形 → 縮小のみ（劣化なし）。object-contain で中央表示。
+  await makeTransparent("shimaenaga-ganbattane.png", "week-complete.png", 1600);
   // 週達成の常駐マーカー（満タン週の日曜行、CSS で小さく表示）
   await makeTransparent("shimaenaga-kinnmedaru.png", "week-medal.png", 80);
 }

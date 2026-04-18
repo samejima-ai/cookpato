@@ -32,9 +32,9 @@ type Props = {
    */
   onActiveQueryChange?: (text: string, date: DateKey) => void;
   /** 編集モード進入時に呼ばれる。週達成判定の baseline スナップショットを取るため。 */
-  onBeginEdit?: () => void;
+  onBeginEdit?: (date: DateKey) => void;
   /** textarea blur 時に呼ばれる。週達成（未達成→達成）遷移を確定する。 */
-  onCommitEdit?: () => void;
+  onCommitEdit?: (date: DateKey) => void;
 };
 
 export function DayRow({
@@ -72,7 +72,7 @@ export function DayRow({
       // 編集進入時点のカーソル行を通知
       onActiveQueryChange?.(caretLine(textareaRef.current.value, len), dateKey);
       // 週達成判定の baseline スナップショットを親に取らせる
-      onBeginEdit?.();
+      onBeginEdit?.(dateKey);
     }
   }, [editing, onActiveQueryChange, onBeginEdit, dateKey]);
 
@@ -164,7 +164,7 @@ export function DayRow({
             onClick={(e) => emitActiveLine(e.currentTarget)}
             onBlur={() => {
               setEditing(false);
-              onCommitEdit?.();
+              onCommitEdit?.(dateKey);
             }}
             className="w-full resize-none bg-transparent outline-none text-base leading-7 min-h-7"
             rows={Math.max(1, lines.length)}

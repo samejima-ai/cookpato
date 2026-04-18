@@ -153,6 +153,7 @@ export function useAppData(): AppDataApi {
   const beginMealsEdit = useCallback((_date: DateKey) => {
     // 関数更新で必ず最新 state を経由してスナップショットを取る。
     // 状態は更新しない（identity 維持で再レンダ抑止）。
+    // ref 書き込みは StrictMode の updater 二重実行でも同値冪等なので updater 内で問題ない。
     setState((prev) => {
       editBaselineRef.current = prev.data.meals;
       return prev;
@@ -160,13 +161,18 @@ export function useAppData(): AppDataApi {
   }, []);
 
   const commitMealsEdit = useCallback((date: DateKey) => {
+    // StrictMode では setState の updater が dev 中 2 回実行される。
+    // 以前は updater 内で editBaselineRef.current = null を行っていたが、
+    // 2 回目の呼び出しで baseline が失われ判定が破綻していた。
+    // クロージャに baseline を閉じ込めてから null 化し、updater を純粋に保つ。
+    const baseline = editBaselineRef.current;
+    editBaselineRef.current = null;
     setState((prev) => {
-      const baseline = editBaselineRef.current ?? prev.data.meals;
-      editBaselineRef.current = null;
+      const effectiveBaseline = baseline ?? prev.data.meals;
       const sunday = startOfWeekKey(date);
       // 既達成週は再発火させない（issue: 「同週を編集し直しても演出は出ない」）
       if (prev.data.completedWeeks.includes(sunday)) return prev;
-      const wasComplete = isWeekComplete(baseline, date);
+      const wasComplete = isWeekComplete(effectiveBaseline, date);
       const nowComplete = isWeekComplete(prev.data.meals, date);
       if (wasComplete || !nowComplete) return prev;
       return {
