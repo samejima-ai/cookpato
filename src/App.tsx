@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Calendar } from "./components/Calendar";
+import { MedalCounter } from "./components/MedalCounter";
 import { SearchBar } from "./components/SearchBar";
 import { SearchResults } from "./components/SearchResults";
 import { StockList } from "./components/StockList";
@@ -74,6 +75,7 @@ export default function App() {
       </header>
       <main className="flex-1 flex flex-col min-h-0">
         <Calendar api={api} scrollTarget={scrollTarget} onActiveQueryChange={handleActiveChange} />
+        <MedalCounter count={api.data.completedWeeks.length} />
         <StockList api={api} />
       </main>
     </div>

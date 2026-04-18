@@ -43,3 +43,21 @@ export function computeCompleteWeekSundays(
   }
   return result;
 }
+
+/**
+ * meals に含まれる全日付から、達成済みの週（日曜キー）集合を網羅的に返す。
+ * 既存ユーザーの遡及カウント用（`loadData` で使う）。
+ * meals のキー数は妻 1 人運用の前提でそれほど大きくないため素朴ループで十分。
+ */
+export function computeAllCompleteWeekSundays(meals: Record<DateKey, DayMeals>): DateKey[] {
+  const sundays = new Set<DateKey>();
+  for (const date of Object.keys(meals)) {
+    sundays.add(startOfWeekKey(date));
+  }
+  const result: DateKey[] = [];
+  for (const sunday of sundays) {
+    if (isWeekComplete(meals, sunday)) result.push(sunday);
+  }
+  result.sort();
+  return result;
+}

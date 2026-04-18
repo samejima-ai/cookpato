@@ -2,7 +2,7 @@
  * アプリ全体のデータを localStorage と同期するhook。
  * 1箇所に集約することで副作用をカプセル化する。
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { startOfWeekKey } from "../lib/date";
 import { generateId } from "../lib/id";
 import { favoriteKey } from "../lib/normalize";
@@ -34,10 +34,14 @@ export type AppDataApi = {
   moveStockUp: (id: string) => void;
   /** ストック項目を 1 つ下に移動（末尾は no-op） */
   moveStockDown: (id: string) => void;
-  /** 直前の setMealsText で週が満タンになった瞬間の日曜 DateKey（演出トリガー用）。永続化しない */
+  /** 編集コミット時の「未達成 → 達成」遷移で日曜キーがセットされる演出トリガー。永続化しない */
   justCompletedSunday: DateKey | null;
   /** 「頑張ったね」演出の終了時に呼ぶ */
   clearJustCompleted: () => void;
+  /** DayRow の編集モード進入時に呼ぶ。baseline スナップショットを取る（演出の正しい遷移判定用） */
+  beginMealsEdit: (date: DateKey) => void;
+  /** DayRow の textarea blur 時に呼ぶ。baseline と現在を比較して達成遷移を判定する */
+  commitMealsEdit: (date: DateKey) => void;
 };
 
 /** 入力テキストを lines に変換（完了状態は同一テキストのみ維持、それ以外リセット） */
@@ -90,6 +94,11 @@ export function useAppData(): AppDataApi {
     justCompletedSunday: null,
   }));
 
+  // 編集セッション開始時の meals スナップショット参照。
+  // beginMealsEdit で保存し、commitMealsEdit で「未達成 → 達成」遷移判定に使う。
+  // copy-on-write な状態なので参照保持で十分（深いコピー不要）。
+  const editBaselineRef = useRef<Record<DateKey, DayMeals> | null>(null);
+
   // data が変わるたびに保存
   useEffect(() => {
     saveData(state.data);
@@ -106,14 +115,12 @@ export function useAppData(): AppDataApi {
       } else {
         nextMeals[date] = nextDay;
       }
-      // 週の「未達成 → 達成」遷移を検知して演出トリガーを立てる
-      const wasComplete = isWeekComplete(prev.data.meals, date);
-      const nowComplete = isWeekComplete(nextMeals, date);
-      const justCompletedSunday =
-        !wasComplete && nowComplete ? startOfWeekKey(date) : prev.justCompletedSunday;
+      // 演出トリガー（justCompletedSunday）と completedWeeks の更新は
+      // commitMealsEdit（textarea blur 時）で行う。
+      // ここでキーストローク毎に評価すると 1 文字入力で発火してしまうため。
       return {
+        ...prev,
         data: { ...prev.data, meals: nextMeals },
-        justCompletedSunday,
       };
     });
   }, []);
@@ -141,6 +148,35 @@ export function useAppData(): AppDataApi {
     setState((prev) =>
       prev.justCompletedSunday === null ? prev : { ...prev, justCompletedSunday: null },
     );
+  }, []);
+
+  const beginMealsEdit = useCallback((_date: DateKey) => {
+    // 関数更新で必ず最新 state を経由してスナップショットを取る。
+    // 状態は更新しない（identity 維持で再レンダ抑止）。
+    setState((prev) => {
+      editBaselineRef.current = prev.data.meals;
+      return prev;
+    });
+  }, []);
+
+  const commitMealsEdit = useCallback((date: DateKey) => {
+    setState((prev) => {
+      const baseline = editBaselineRef.current ?? prev.data.meals;
+      editBaselineRef.current = null;
+      const sunday = startOfWeekKey(date);
+      // 既達成週は再発火させない（issue: 「同週を編集し直しても演出は出ない」）
+      if (prev.data.completedWeeks.includes(sunday)) return prev;
+      const wasComplete = isWeekComplete(baseline, date);
+      const nowComplete = isWeekComplete(prev.data.meals, date);
+      if (wasComplete || !nowComplete) return prev;
+      return {
+        data: {
+          ...prev.data,
+          completedWeeks: [...prev.data.completedWeeks, sunday],
+        },
+        justCompletedSunday: sunday,
+      };
+    });
   }, []);
 
   const toggleLine = useCallback((date: DateKey, lineIndex: number) => {
@@ -265,5 +301,7 @@ export function useAppData(): AppDataApi {
     moveStockDown,
     justCompletedSunday: state.justCompletedSunday,
     clearJustCompleted,
+    beginMealsEdit,
+    commitMealsEdit,
   };
 }

@@ -23,6 +23,7 @@ function makeData(): AppData {
     },
     stock: [],
     favorites: [],
+    completedWeeks: [],
   };
 }
 
@@ -33,7 +34,7 @@ function makeRelativeData(entries: { daysAgo: number; lines: DayMeals["lines"] }
   for (const { daysAgo, lines } of entries) {
     meals[addDaysKey(today, -daysAgo)] = { lines };
   }
-  return { version: 1, meals, stock: [], favorites: [] };
+  return { version: 1, meals, stock: [], favorites: [], completedWeeks: [] };
 }
 
 describe("useSearch", () => {

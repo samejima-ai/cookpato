@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import emptyDayImg from "../assets/empty-day.png";
 import favoriteImg from "../assets/favorite.png";
-import weekMedalImg from "../assets/week-medal.png";
 import { useAutoShrink } from "../hooks/useAutoShrink";
 import { useLongPress } from "../hooks/useLongPress";
 import { formatDayLabel, isSaturday, isSunday } from "../lib/date";
@@ -16,8 +15,6 @@ type Props = {
   isToday: boolean;
   /** 未来の空日ウィンドウに含まれる日か（SPEC「空状態の応援表示」） */
   showCheer: boolean;
-  /** 「その週（日〜土）がすべて埋まった」日曜行に常駐マークを出すか */
-  showWeekComplete: boolean;
   /** お気に入り判定用の正規化済みキー集合 */
   favoriteKeys: Set<string>;
   onTextChange: (text: string) => void;
@@ -33,6 +30,10 @@ type Props = {
    * 日付は「自分自身を検索対象から除外する」ために使う。
    */
   onActiveQueryChange?: (text: string, date: DateKey) => void;
+  /** 編集モード進入時に呼ばれる。週達成判定の baseline スナップショットを取るため。 */
+  onBeginEdit?: () => void;
+  /** textarea blur 時に呼ばれる。週達成（未達成→達成）遷移を確定する。 */
+  onCommitEdit?: () => void;
 };
 
 export function DayRow({
@@ -40,7 +41,6 @@ export function DayRow({
   day,
   isToday,
   showCheer,
-  showWeekComplete,
   favoriteKeys,
   onTextChange,
   onToggleLine,
@@ -48,6 +48,8 @@ export function DayRow({
   onDeleteLine,
   onMemoChange,
   onActiveQueryChange,
+  onBeginEdit,
+  onCommitEdit,
 }: Props) {
   const [editing, setEditing] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<number | null>(null);
@@ -67,8 +69,10 @@ export function DayRow({
       autoResize(textareaRef.current);
       // 編集進入時点のカーソル行を通知
       onActiveQueryChange?.(caretLine(textareaRef.current.value, len), dateKey);
+      // 週達成判定の baseline スナップショットを親に取らせる
+      onBeginEdit?.();
     }
-  }, [editing, onActiveQueryChange, dateKey]);
+  }, [editing, onActiveQueryChange, onBeginEdit, dateKey]);
 
   // 編集終了時にアクティブクエリをクリア
   useEffect(() => {
@@ -121,17 +125,8 @@ export function DayRow({
   return (
     <div className={`flex gap-3 px-3 py-2 border-b border-neutral-100 ${bgClass}`}>
       <div className="w-24 shrink-0">
-        <div className={`text-sm font-medium ${labelColor} flex items-center gap-1`}>
+        <div className={`text-sm font-medium ${labelColor}`}>
           <span>{formatDayLabel(dateKey)}</span>
-          {showWeekComplete && isSunday(dateKey) && (
-            <img
-              src={weekMedalImg}
-              alt=""
-              aria-hidden="true"
-              title="この週の献立が埋まりました"
-              className="w-6 h-6 shrink-0"
-            />
-          )}
         </div>
         {holidayName && (
           <div className="text-xs text-red-500 mt-0.5 leading-tight">{holidayName}</div>
@@ -152,7 +147,10 @@ export function DayRow({
             onSelect={(e) => emitActiveLine(e.currentTarget)}
             onKeyUp={(e) => emitActiveLine(e.currentTarget)}
             onClick={(e) => emitActiveLine(e.currentTarget)}
-            onBlur={() => setEditing(false)}
+            onBlur={() => {
+              setEditing(false);
+              onCommitEdit?.();
+            }}
             className="w-full resize-none bg-transparent outline-none text-base leading-7 min-h-7"
             rows={Math.max(1, lines.length)}
             aria-label={`${formatDayLabel(dateKey)} の献立を編集`}
