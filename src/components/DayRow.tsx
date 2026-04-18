@@ -320,14 +320,14 @@ function LineItem({
       </button>
       <div
         ref={containerRef}
-        className="flex-1 self-center relative overflow-hidden"
+        className="flex-1 min-w-0 self-center relative overflow-hidden"
         {...longPress}
       >
         {/* 計測用：BASE_PX で描画したときの自然幅を得るための非表示要素 */}
         <span
           ref={measureRef}
           aria-hidden="true"
-          className="invisible absolute top-0 left-0 whitespace-pre"
+          className="invisible absolute top-0 left-0 whitespace-nowrap"
           style={{ fontSize: `${DISH_BASE_PX}px` }}
         >
           {text}
