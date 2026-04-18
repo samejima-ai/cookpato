@@ -16,5 +16,8 @@
 ## スコープ外
 → DONT.md
 
+## 開発体制
+→ REGIME.md（モード: M1 単体 / Lifecycle: L=1 / ARC: monolith）
+
 ## 開発環境
 → CLAUDE.md, .claude/skills/, sensors/
