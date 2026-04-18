@@ -1,4 +1,5 @@
 import type { ChangeEvent } from "react";
+import { useComposition } from "../hooks/useComposition";
 
 type Props = {
   value: string;
@@ -18,7 +19,9 @@ export function SearchBar({
   activeCountCap = 20,
   onActiveCountTap,
 }: Props) {
+  const ime = useComposition();
   function handle(e: ChangeEvent<HTMLInputElement>) {
+    if (ime.isComposing(e.nativeEvent)) return;
     onChange(e.target.value);
   }
   // 検索欄が空（空白のみを含む）かつ 件数 > 0 かつ タップハンドラが渡されているときだけ
@@ -45,6 +48,11 @@ export function SearchBar({
       <input
         type="search"
         value={value}
+        onCompositionStart={ime.onCompositionStart}
+        onCompositionEnd={(e) => {
+          ime.onCompositionEnd();
+          onChange(e.currentTarget.value);
+        }}
         onChange={handle}
         placeholder="過去の献立を検索"
         className="flex-1 bg-transparent outline-none text-base placeholder:text-neutral-400"

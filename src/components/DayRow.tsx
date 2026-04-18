@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import emptyDayImg from "../assets/empty-day.png";
 import favoriteImg from "../assets/favorite.png";
 import { useAutoShrink } from "../hooks/useAutoShrink";
+import { useComposition } from "../hooks/useComposition";
 import { useLongPress } from "../hooks/useLongPress";
 import { formatDayLabel, isSaturday, isSunday } from "../lib/date";
 import { tapFeedback } from "../lib/haptics";
@@ -58,6 +59,7 @@ export function DayRow({
   const [wobbleIndex, setWobbleIndex] = useState<number | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const wobbleRowRef = useRef<HTMLLIElement | null>(null);
+  const ime = useComposition();
   const lines = day?.lines ?? [];
   const rawText = lines.map((l) => l.text).join("\n");
 
@@ -139,7 +141,17 @@ export function DayRow({
           <textarea
             ref={textareaRef}
             defaultValue={rawText}
+            onCompositionStart={ime.onCompositionStart}
+            onCompositionEnd={(e) => {
+              ime.onCompositionEnd();
+              // compositionEnd の最終確定値を明示反映する（iOS Safari では
+              // compositionEnd 後の onChange が発火しない経路があるため）
+              onTextChange(e.currentTarget.value);
+              autoResize(e.currentTarget);
+              emitActiveLine(e.currentTarget);
+            }}
             onChange={(e) => {
+              if (ime.isComposing(e.nativeEvent)) return;
               onTextChange(e.target.value);
               autoResize(e.target);
               emitActiveLine(e.target);
@@ -499,6 +511,7 @@ function MemoField({ dateKey, value, onChange }: MemoFieldProps) {
     minPx: 8,
     emptyPx: 10,
   });
+  const ime = useComposition();
 
   return (
     <div
@@ -520,7 +533,15 @@ function MemoField({ dateKey, value, onChange }: MemoFieldProps) {
       <input
         type="text"
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onCompositionStart={ime.onCompositionStart}
+        onCompositionEnd={(e) => {
+          ime.onCompositionEnd();
+          onChange(e.currentTarget.value);
+        }}
+        onChange={(e) => {
+          if (ime.isComposing(e.nativeEvent)) return;
+          onChange(e.target.value);
+        }}
         placeholder="メモ"
         style={{ fontSize: `${fontPx}px` }}
         className="w-full bg-transparent outline-none text-neutral-500 italic placeholder:text-neutral-300 placeholder:not-italic leading-tight py-0"

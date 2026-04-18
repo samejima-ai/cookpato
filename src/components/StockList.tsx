@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import emptyStockImg from "../assets/empty-stock.png";
 import favoriteImg from "../assets/favorite.png";
 import type { AppDataApi } from "../hooks/useAppData";
+import { useComposition } from "../hooks/useComposition";
 import { tapFeedback } from "../lib/haptics";
 import { favoriteKey } from "../lib/normalize";
 
@@ -14,6 +15,7 @@ export function StockList({ api }: Props) {
   const [draftName, setDraftName] = useState("");
   const [draftQty, setDraftQty] = useState("");
   const favoriteKeys = useMemo(() => new Set(api.data.favorites), [api.data.favorites]);
+  const nameIme = useComposition();
 
   function handleAdd() {
     const name = draftName.trim();
@@ -133,9 +135,18 @@ export function StockList({ api }: Props) {
             <input
               type="text"
               value={draftName}
-              onChange={(e) => setDraftName(e.target.value)}
+              onCompositionStart={nameIme.onCompositionStart}
+              onCompositionEnd={(e) => {
+                nameIme.onCompositionEnd();
+                setDraftName(e.currentTarget.value);
+              }}
+              onChange={(e) => {
+                if (nameIme.isComposing(e.nativeEvent)) return;
+                setDraftName(e.target.value);
+              }}
               onKeyDown={(e) => {
-                if (e.key === "Enter") {
+                // IME 確定 Enter を誤って submit しない
+                if (e.key === "Enter" && !e.nativeEvent.isComposing) {
                   e.preventDefault();
                   handleAdd();
                 }

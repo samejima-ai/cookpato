@@ -303,6 +303,62 @@ describe("DayRow", () => {
     });
   });
 
+  // iOS Safari の IME 未確定中に onChange 経由で親 state を更新すると、
+  // フリック/トグル入力が「タタタ」のように多重反映されるバグが発生する（#11）。
+  // compositionStart〜compositionEnd の間は値反映をスキップすることを保証する。
+  describe("IME 未確定中は値反映をスキップする (#11)", () => {
+    it("textarea: compositionStart 中の change は onTextChange を呼ばない", () => {
+      const onTextChange = vi.fn();
+      render(<DayRow {...baseProps()} onTextChange={onTextChange} />);
+      fireEvent.click(screen.getByLabelText(/4月15日.*献立を編集/));
+      const textarea = screen.queryAllByRole("textbox").find((el) => el.tagName === "TEXTAREA");
+      if (!textarea) throw new Error("textarea not found");
+
+      fireEvent.compositionStart(textarea);
+      fireEvent.change(textarea, { target: { value: "タ" } });
+      fireEvent.change(textarea, { target: { value: "タタ" } });
+      expect(onTextChange).not.toHaveBeenCalled();
+    });
+
+    it("textarea: compositionEnd で確定値が onTextChange に反映される", () => {
+      const onTextChange = vi.fn();
+      render(<DayRow {...baseProps()} onTextChange={onTextChange} />);
+      fireEvent.click(screen.getByLabelText(/4月15日.*献立を編集/));
+      const textarea = screen
+        .queryAllByRole("textbox")
+        .find((el) => el.tagName === "TEXTAREA") as HTMLTextAreaElement;
+      if (!textarea) throw new Error("textarea not found");
+
+      fireEvent.compositionStart(textarea);
+      fireEvent.change(textarea, { target: { value: "タ" } });
+      textarea.value = "タ";
+      fireEvent.compositionEnd(textarea);
+      expect(onTextChange).toHaveBeenLastCalledWith("タ");
+    });
+
+    it("textarea: IME を使わない通常入力は従来通り onTextChange が呼ばれる", () => {
+      const onTextChange = vi.fn();
+      render(<DayRow {...baseProps()} onTextChange={onTextChange} />);
+      fireEvent.click(screen.getByLabelText(/4月15日.*献立を編集/));
+      const textarea = screen.queryAllByRole("textbox").find((el) => el.tagName === "TEXTAREA");
+      if (!textarea) throw new Error("textarea not found");
+
+      fireEvent.change(textarea, { target: { value: "a" } });
+      expect(onTextChange).toHaveBeenLastCalledWith("a");
+    });
+
+    it("MemoField: compositionStart 中の change は onMemoChange を呼ばない", () => {
+      const onMemoChange = vi.fn();
+      render(<DayRow {...baseProps()} onMemoChange={onMemoChange} />);
+      const memo = screen.getByLabelText(/4月15日.*のメモ/);
+
+      fireEvent.compositionStart(memo);
+      fireEvent.change(memo, { target: { value: "ソ" } });
+      fireEvent.change(memo, { target: { value: "ソソ" } });
+      expect(onMemoChange).not.toHaveBeenCalled();
+    });
+  });
+
   describe("週達成マーカー（廃止）と編集コミット連携", () => {
     it("日曜行に週達成メダルアイコンが描画されない（常駐マーカー廃止）", () => {
       // 2026-04-12 は日曜
