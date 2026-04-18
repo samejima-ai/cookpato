@@ -3,6 +3,7 @@ import emptyDayImg from "../assets/empty-day.png";
 import favoriteImg from "../assets/favorite.png";
 import weekMedalImg from "../assets/week-medal.png";
 import { useAutoShrink } from "../hooks/useAutoShrink";
+import { useLongPress } from "../hooks/useLongPress";
 import { formatDayLabel, isSaturday, isSunday } from "../lib/date";
 import { tapFeedback } from "../lib/haptics";
 import { getHolidayName } from "../lib/holidays";
@@ -50,7 +51,11 @@ export function DayRow({
 }: Props) {
   const [editing, setEditing] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<number | null>(null);
+  // 行削除モード（長押しで突入）中の対象行 index。null は非アクティブ。
+  // 同時に揺れる行は高々 1 本（iOS のぷるぷるモード相当）。
+  const [wobbleIndex, setWobbleIndex] = useState<number | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const wobbleRowRef = useRef<HTMLLIElement | null>(null);
   const lines = day?.lines ?? [];
   const rawText = lines.map((l) => l.text).join("\n");
 
@@ -69,6 +74,30 @@ export function DayRow({
   useEffect(() => {
     if (!editing) onActiveQueryChange?.("", dateKey);
   }, [editing, onActiveQueryChange, dateKey]);
+
+  // 編集モードに入ったら wobble は解除（重複表示の回避）
+  useEffect(() => {
+    if (editing) setWobbleIndex(null);
+  }, [editing]);
+
+  // wobble 中は「対象行の外をタップ」「ESC」で解除する
+  useEffect(() => {
+    if (wobbleIndex === null) return;
+    const onPointerDown = (e: PointerEvent) => {
+      const row = wobbleRowRef.current;
+      if (row?.contains(e.target as Node)) return;
+      setWobbleIndex(null);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setWobbleIndex(null);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [wobbleIndex]);
 
   function emitActiveLine(el: HTMLTextAreaElement): void {
     if (!onActiveQueryChange) return;
@@ -166,9 +195,15 @@ export function DayRow({
                       text={line.text}
                       done={line.done}
                       favorite={favoriteKeys.has(favoriteKey(line.text))}
+                      wobble={wobbleIndex === idx}
+                      rowRef={wobbleIndex === idx ? wobbleRowRef : undefined}
                       onToggle={() => onToggleLine(idx)}
                       onToggleFavorite={() => onToggleFavorite(idx)}
-                      onRequestDelete={() => setPendingDelete(idx)}
+                      onLongPress={() => setWobbleIndex(idx)}
+                      onRequestDelete={() => {
+                        setWobbleIndex(null);
+                        setPendingDelete(idx);
+                      }}
                     />
                   ),
                 )}
@@ -195,8 +230,14 @@ type LineItemProps = {
   text: string;
   done: boolean;
   favorite: boolean;
+  /** 削除モード（長押し突入）中か。true の間だけ ✕ ボタンを表示＋行を揺らす。 */
+  wobble: boolean;
+  /** wobble 中の外タップ判定用に親が渡す `<li>` 参照（wobble=false のときは未指定） */
+  rowRef?: React.Ref<HTMLLIElement>;
   onToggle: () => void;
   onToggleFavorite: () => void;
+  /** 料理名エリアを長押しされたとき。親は対応行を wobble 状態に遷移させる。 */
+  onLongPress: () => void;
   onRequestDelete: () => void;
 };
 
@@ -210,13 +251,22 @@ type LineItemProps = {
  * - 料理名は 1 行に自動縮小（MemoField と同じ `useAutoShrink`）
  * - タップ時 `tapFeedback()`（対応端末のみ、非対応は no-op）
  * - 300ms 以内の連続タップは 1 回として扱う（チャタリング防止）
+ *
+ * 行削除の UI：
+ * - ✕ ボタンは常時非表示（料理名の表示幅を最大化するため）
+ * - 料理名エリアを 500ms 長押しすると「削除モード（ぷるぷる）」に入り
+ *   ✕ が現れる。以降は従来の確認ダイアログ経由で削除
+ * - 削除モード中の外タップ / ESC で通常表示に戻る（親 `DayRow` が制御）
  */
 function LineItem({
   text,
   done,
   favorite,
+  wobble,
+  rowRef,
   onToggle,
   onToggleFavorite,
+  onLongPress,
   onRequestDelete,
 }: LineItemProps) {
   const handleToggle = useDebouncedTap((e: React.MouseEvent) => {
@@ -234,6 +284,10 @@ function LineItem({
     tapFeedback();
     onRequestDelete();
   };
+  const longPress = useLongPress(() => {
+    tapFeedback();
+    onLongPress();
+  });
 
   const DISH_BASE_PX = 16;
   const { containerRef, measureRef, fontPx } = useAutoShrink({
@@ -246,9 +300,10 @@ function LineItem({
   const checkboxClass = done
     ? "bg-neutral-400 border-neutral-400 text-white"
     : "border-neutral-300 bg-white";
+  const liClass = `flex items-stretch min-h-11 rounded ${wobble ? "animate-row-wobble" : ""}`;
 
   return (
-    <li className="flex items-stretch min-h-11 rounded">
+    <li ref={rowRef} className={liClass}>
       <button
         type="button"
         onClick={handleToggle}
@@ -262,7 +317,11 @@ function LineItem({
           {done ? "✓" : ""}
         </span>
       </button>
-      <div ref={containerRef} className="flex-1 self-center relative overflow-hidden">
+      <div
+        ref={containerRef}
+        className="flex-1 self-center relative overflow-hidden"
+        {...longPress}
+      >
         {/* 計測用：BASE_PX で描画したときの自然幅を得るための非表示要素 */}
         <span
           ref={measureRef}
@@ -292,14 +351,16 @@ function LineItem({
           <span className="w-5 h-5 text-neutral-300 text-base leading-none">♡</span>
         )}
       </button>
-      <button
-        type="button"
-        onClick={handleDelete}
-        className="w-11 h-11 flex items-center justify-center shrink-0 text-neutral-300 active:text-red-500 text-lg"
-        aria-label={`${text} を削除`}
-      >
-        ✕
-      </button>
+      {wobble && (
+        <button
+          type="button"
+          onClick={handleDelete}
+          className="w-11 h-11 flex items-center justify-center shrink-0 text-neutral-300 active:text-red-500 text-lg"
+          aria-label={`${text} を削除`}
+        >
+          ✕
+        </button>
+      )}
     </li>
   );
 }

@@ -2,8 +2,8 @@
  * DayRow の完了トグル強化（SPEC「完了トグル」改訂）・行削除確認ダイアログ・
  * お気に入りマーカー（正規化キー）のリグレッションテスト。
  */
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DayRow } from "../src/components/DayRow";
 import { favoriteKey } from "../src/lib/normalize";
 import type { DayMeals } from "../src/types";
@@ -14,6 +14,21 @@ function makeDay(lines: { text: string; done?: boolean }[]): DayMeals {
   return {
     lines: lines.map((l) => ({ text: l.text, done: l.done ?? false })),
   };
+}
+
+/**
+ * 料理名エリアを長押しして「削除モード（ぷるぷる）」に突入させる。
+ * fake timers 必須（呼び出し側の describe で `vi.useFakeTimers()` 済みを前提）。
+ */
+function longPressDish(text: string): void {
+  const dishSpan = screen.getByText(text, { selector: "span.block" });
+  const dishArea = dishSpan.parentElement;
+  if (!dishArea) throw new Error("dish area not found");
+  fireEvent.mouseDown(dishArea);
+  act(() => {
+    vi.advanceTimersByTime(500);
+  });
+  fireEvent.mouseUp(dishArea);
 }
 
 function baseProps() {
@@ -134,8 +149,24 @@ describe("DayRow", () => {
   });
 
   describe("行削除の確認ダイアログ", () => {
-    it("✕ タップで確認ダイアログが表示される", () => {
+    // 長押し（500ms タイマー）を進めるため fake timers を使う
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("✕ は通常時は表示されず、長押しで現れる", () => {
       render(<DayRow {...baseProps()} day={makeDay([{ text: "豚バラ大根" }])} />);
+      expect(screen.queryByRole("button", { name: /豚バラ大根 を削除/ })).toBeNull();
+      longPressDish("豚バラ大根");
+      expect(screen.getByRole("button", { name: /豚バラ大根 を削除/ })).toBeTruthy();
+    });
+
+    it("長押し→✕ タップで確認ダイアログが表示される", () => {
+      render(<DayRow {...baseProps()} day={makeDay([{ text: "豚バラ大根" }])} />);
+      longPressDish("豚バラ大根");
       const del = screen.getByRole("button", { name: /豚バラ大根 を削除/ });
       fireEvent.click(del);
       expect(screen.getByRole("dialog", { name: "行を削除" })).toBeTruthy();
@@ -152,6 +183,7 @@ describe("DayRow", () => {
           onDeleteLine={onDeleteLine}
         />,
       );
+      longPressDish("サラダ");
       fireEvent.click(screen.getByRole("button", { name: /サラダ を削除/ }));
       fireEvent.click(screen.getByRole("button", { name: "削除" }));
       expect(onDeleteLine).toHaveBeenCalledWith(1);
@@ -163,6 +195,7 @@ describe("DayRow", () => {
       render(
         <DayRow {...baseProps()} day={makeDay([{ text: "カレー" }])} onDeleteLine={onDeleteLine} />,
       );
+      longPressDish("カレー");
       fireEvent.click(screen.getByRole("button", { name: /カレー を削除/ }));
       fireEvent.click(screen.getByRole("button", { name: "キャンセル" }));
       expect(onDeleteLine).not.toHaveBeenCalled();
@@ -174,6 +207,7 @@ describe("DayRow", () => {
       render(
         <DayRow {...baseProps()} day={makeDay([{ text: "カレー" }])} onDeleteLine={onDeleteLine} />,
       );
+      longPressDish("カレー");
       fireEvent.click(screen.getByRole("button", { name: /カレー を削除/ }));
       // role=presentation はオーバーレイ自体。
       const overlay = screen.getByRole("dialog").parentElement;
@@ -181,6 +215,48 @@ describe("DayRow", () => {
       fireEvent.click(overlay);
       expect(onDeleteLine).not.toHaveBeenCalled();
       expect(screen.queryByRole("dialog")).toBeNull();
+    });
+  });
+
+  describe("長押しで削除モード（ぷるぷる）", () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("長押し中の行に animate-row-wobble が付与される", () => {
+      render(<DayRow {...baseProps()} day={makeDay([{ text: "豚バラ大根" }])} />);
+      longPressDish("豚バラ大根");
+      const toggle = screen.getByRole("button", { name: /完了にする/ });
+      const li = toggle.closest("li");
+      if (!li) throw new Error("li not found");
+      expect(li.className).toMatch(/animate-row-wobble/);
+    });
+
+    it("ESC キーで削除モードが解除され ✕ が消える", () => {
+      render(<DayRow {...baseProps()} day={makeDay([{ text: "豚バラ大根" }])} />);
+      longPressDish("豚バラ大根");
+      expect(screen.queryByRole("button", { name: /豚バラ大根 を削除/ })).toBeTruthy();
+      fireEvent.keyDown(document, { key: "Escape" });
+      expect(screen.queryByRole("button", { name: /豚バラ大根 を削除/ })).toBeNull();
+    });
+
+    it("500ms 未満で指を離した場合は削除モードに入らない", () => {
+      render(<DayRow {...baseProps()} day={makeDay([{ text: "豚バラ大根" }])} />);
+      const dishSpan = screen.getByText("豚バラ大根", { selector: "span.block" });
+      const dishArea = dishSpan.parentElement;
+      if (!dishArea) throw new Error("dish area not found");
+      fireEvent.mouseDown(dishArea);
+      act(() => {
+        vi.advanceTimersByTime(300);
+      });
+      fireEvent.mouseUp(dishArea);
+      act(() => {
+        vi.advanceTimersByTime(500);
+      });
+      expect(screen.queryByRole("button", { name: /豚バラ大根 を削除/ })).toBeNull();
     });
   });
 
