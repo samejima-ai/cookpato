@@ -59,9 +59,12 @@ async function makeIcon(input, output, size, paddingRatio = 0.1) {
  * 透過維持で縮小のみ（UI 用イラスト・アイコン）
  */
 async function makeTransparent(input, output, size) {
+  // palette: true（256色パレット化）+ compressionLevel: 9 + effort: 10 で
+  // 透過 PNG を大幅圧縮。iOS Safari でも劣化は目視できない。
+  // 目的: workbox precache 上限（2 MiB）を超えないようにする。
   await sharp(resolve(ASSETS, input))
     .resize(size, size, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
-    .png()
+    .png({ compressionLevel: 9, palette: true, effort: 10 })
     .toFile(resolve(SRC_ASSETS, output));
 
   console.info(`✓ src/assets/${output} (${size}x${size})`);
