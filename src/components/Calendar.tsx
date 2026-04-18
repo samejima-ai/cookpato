@@ -61,7 +61,7 @@ export function Calendar({ api, scrollTarget, onActiveQueryChange }: Props) {
     if (!api.justCompletedSunday) return;
     const timer = window.setTimeout(() => {
       api.clearJustCompleted();
-    }, 3000);
+    }, 5000);
     return () => window.clearTimeout(timer);
   }, [api.justCompletedSunday, api.clearJustCompleted]);
 
@@ -218,7 +218,7 @@ export function Calendar({ api, scrollTarget, onActiveQueryChange }: Props) {
             src={weekCompleteImg}
             alt=""
             aria-hidden="true"
-            className="w-[min(85vw,85vh)] h-[min(85vw,85vh)] drop-shadow"
+            className="w-screen h-screen object-contain drop-shadow"
           />
         </div>
       )}

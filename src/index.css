@@ -52,17 +52,17 @@ input[type="search"] {
   animation: cheer-flip 2s steps(1, end) infinite;
 }
 
-/* 週達成「頑張ったね」演出：フェードイン → ふわっと浮遊 → フェードアウト（合計 3 秒）*/
+/* 週達成「頑張ったね」演出：フェードイン → ふわっと浮遊 → フェードアウト（合計 5 秒）*/
 @keyframes week-complete-appear {
   0% {
     opacity: 0;
     transform: translate(-50%, -40%) scale(0.92);
   }
-  15% {
+  10% {
     opacity: 1;
     transform: translate(-50%, -50%) scale(1);
   }
-  85% {
+  90% {
     opacity: 1;
     transform: translate(-50%, -54%) scale(1);
   }
@@ -72,7 +72,7 @@ input[type="search"] {
   }
 }
 .animate-week-complete {
-  animation: week-complete-appear 3s ease-in-out forwards;
+  animation: week-complete-appear 5s ease-in-out forwards;
 }
 
 /* 行削除モード（長押しで突入）：iOS ホーム画面のぷるぷるモード相当。
