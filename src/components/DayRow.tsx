@@ -245,7 +245,8 @@ type LineItemProps = {
  * 1品の表示＋トグル/お気に入り/削除ボタン。
  *
  * 調理中操作の最適化（SPEC「完了トグル（品単位）」改訂）：
- * - ヒット領域：トグルボタンは行左 1/3 以上を占有（min-w-11 で 44px 下限）
+ * - ヒット領域：トグル/お気に入り/削除ともに 44×44px（iOS HIG 下限）
+ *   （料理名の表示幅を最大化するため、以前の「行左 1/3 占有」は廃止）
  * - 視覚フィードバック：文字色グレー + チェックボックスのグレー塗り
  *   （完了行は静かに後退させ、未完了行との相対的なコントラストで識別）
  * - 料理名は 1 行に自動縮小（MemoField と同じ `useAutoShrink`）
@@ -307,7 +308,7 @@ function LineItem({
       <button
         type="button"
         onClick={handleToggle}
-        className="w-1/3 min-w-11 flex items-center px-1 shrink-0"
+        className="w-11 flex items-center justify-center shrink-0"
         aria-label={done ? "未完了に戻す" : "完了にする"}
         aria-pressed={done}
       >
