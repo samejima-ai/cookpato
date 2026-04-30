@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import cartImg from "../assets/cart.png";
+import cartImg from "../assets/shimaenaga-cart.png";
 import emptyDayImg from "../assets/empty-day.png";
 import favoriteImg from "../assets/favorite.png";
 import { useAutoShrink } from "../hooks/useAutoShrink";
@@ -377,7 +377,7 @@ function LineItem({
         {cart ? (
           <img src={cartImg} alt="" aria-hidden="true" className="w-6 h-6" />
         ) : (
-          <span className="w-5 h-5 text-neutral-300 text-base leading-none">🛒</span>
+          <span className="w-5 h-5 text-base leading-none opacity-30">🛒</span>
         )}
       </button>
       <button

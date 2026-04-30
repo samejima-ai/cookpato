@@ -70,6 +70,37 @@ async function makeTransparent(input, output, size) {
   console.info(`✓ src/assets/${output} (${size}x${size})`);
 }
 
+/**
+ * 黒背景の素材から黒抜き → トリム → 縮小（透過 PNG 出力）
+ * 素材が透過 PNG でなく黒背景の場合に使う。
+ * 暗部は alpha 0、縁の中間輝度はグラデで残し、ジャギーを抑える。
+ */
+async function makeTransparentFromBlackBg(input, output, size) {
+  const inputPath = resolve(ASSETS, input);
+  const { data, info } = await sharp(inputPath)
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  for (let i = 0; i < data.length; i += 4) {
+    const lum = Math.max(data[i], data[i + 1], data[i + 2]);
+    if (lum < 30) data[i + 3] = 0;
+    else if (lum < 90) data[i + 3] = Math.round(data[i + 3] * (lum - 30) / 60);
+  }
+  const buf = await sharp(data, {
+    raw: { width: info.width, height: info.height, channels: 4 },
+  })
+    .png()
+    .toBuffer();
+
+  await sharp(buf)
+    .trim()
+    .resize(size, size, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    .png({ compressionLevel: 9, palette: true, effort: 10 })
+    .toFile(resolve(SRC_ASSETS, output));
+
+  console.info(`✓ src/assets/${output} (${size}x${size}, black-bg removed)`);
+}
+
 async function main() {
   // PWA アイコン（sushimaenaga = 食べ物アプリのアイデンティティ）
   await makeIcon("sushimaenaga.png", "pwa-192x192.png", 192, 0.1);
@@ -86,6 +117,9 @@ async function main() {
 
   // お気に入りアイコン（行内表示用、表示は CSS で 24px に縮小）
   await makeTransparent("shimaenaga-heart.png", "favorite.png", 80);
+
+  // カート ON マーカー（素材は黒背景なので黒抜き → 200px 透過 PNG に整形）
+  await makeTransparentFromBlackBg("shimaenaga-cart.png", "shimaenaga-cart.png", 200);
 
   // 週達成時の演出オーバーレイ（満タン遷移時に中央に出る「頑張ったね」）。
   // 画面短辺（iPhone 論理 390-430px 想定）× DPR 3 = 1290px を超えるよう 1600 で出す。
