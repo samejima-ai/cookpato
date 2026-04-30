@@ -12,6 +12,12 @@ export type MealLine = {
   text: string;
   /** 完了済みか */
   done: boolean;
+  /**
+   * 買い物マーカー（妻の手動視覚マーキング用）。お気に入りとは異なり、
+   * その日のその行に閉じる（行ごと管理。料理名共通化はしない）。
+   * 既存データ互換のため optional。読み込み時 undefined は false 扱い。
+   */
+  cart?: boolean;
 };
 
 /** 1日分の献立 */

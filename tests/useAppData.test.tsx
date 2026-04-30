@@ -357,6 +357,135 @@ describe("useAppData", () => {
     });
   });
 
+  describe("買い物マーカー（行ごと）", () => {
+    it("toggleCart で行の cart フラグが立つ", () => {
+      const { result } = renderHook(() => useAppData());
+      act(() => {
+        result.current.setMealsText("2026-04-15", "豚バラ大根\nサラダ");
+      });
+      act(() => {
+        result.current.toggleCart("2026-04-15", 0);
+      });
+      expect(result.current.data.meals["2026-04-15"]?.lines[0]?.cart).toBe(true);
+      expect(result.current.data.meals["2026-04-15"]?.lines[1]?.cart).toBeUndefined();
+    });
+
+    it("再度 toggleCart で OFF に戻る（cart は未定義に戻り JSON 表現を最小化）", () => {
+      const { result } = renderHook(() => useAppData());
+      act(() => {
+        result.current.setMealsText("2026-04-15", "カレー");
+      });
+      act(() => {
+        result.current.toggleCart("2026-04-15", 0);
+      });
+      expect(result.current.data.meals["2026-04-15"]?.lines[0]?.cart).toBe(true);
+      act(() => {
+        result.current.toggleCart("2026-04-15", 0);
+      });
+      expect(result.current.data.meals["2026-04-15"]?.lines[0]?.cart).toBeUndefined();
+    });
+
+    it("同じ料理を別日に書いても cart は連動しない（行ごと独立）", () => {
+      const { result } = renderHook(() => useAppData());
+      act(() => {
+        result.current.setMealsText("2026-04-15", "豚バラ大根");
+        result.current.setMealsText("2026-04-16", "豚バラ大根");
+      });
+      act(() => {
+        result.current.toggleCart("2026-04-15", 0);
+      });
+      expect(result.current.data.meals["2026-04-15"]?.lines[0]?.cart).toBe(true);
+      expect(result.current.data.meals["2026-04-16"]?.lines[0]?.cart).toBeUndefined();
+    });
+
+    it("空文字の行は cart 対象外（no-op）", () => {
+      const { result } = renderHook(() => useAppData());
+      act(() => {
+        result.current.setMealsText("2026-04-15", "カレー\n");
+      });
+      act(() => {
+        result.current.toggleCart("2026-04-15", 1);
+      });
+      expect(result.current.data.meals["2026-04-15"]?.lines[1]?.cart).toBeUndefined();
+    });
+
+    it("cart は完了/お気に入りと独立してトグルできる", () => {
+      const { result } = renderHook(() => useAppData());
+      act(() => {
+        result.current.setMealsText("2026-04-15", "カレー");
+      });
+      act(() => {
+        result.current.toggleCart("2026-04-15", 0);
+        result.current.toggleLine("2026-04-15", 0);
+        result.current.toggleFavorite("2026-04-15", 0);
+      });
+      expect(result.current.data.meals["2026-04-15"]?.lines[0]?.cart).toBe(true);
+      expect(result.current.data.meals["2026-04-15"]?.lines[0]?.done).toBe(true);
+      expect(result.current.data.favorites).toContain(favoriteKey("カレー"));
+    });
+
+    it("テキストを変えずに行を編集（同一テキスト）すると cart は維持される", () => {
+      const { result } = renderHook(() => useAppData());
+      act(() => {
+        result.current.setMealsText("2026-04-15", "カレー\nサラダ");
+      });
+      act(() => {
+        result.current.toggleCart("2026-04-15", 0);
+      });
+      // 同じテキストで再 setMealsText しても引き継ぎ
+      act(() => {
+        result.current.setMealsText("2026-04-15", "カレー\nサラダ");
+      });
+      expect(result.current.data.meals["2026-04-15"]?.lines[0]?.cart).toBe(true);
+    });
+
+    it("行のテキストを変更すると cart はリセットされる", () => {
+      const { result } = renderHook(() => useAppData());
+      act(() => {
+        result.current.setMealsText("2026-04-15", "カレー");
+      });
+      act(() => {
+        result.current.toggleCart("2026-04-15", 0);
+      });
+      expect(result.current.data.meals["2026-04-15"]?.lines[0]?.cart).toBe(true);
+      // テキストを書き換える
+      act(() => {
+        result.current.setMealsText("2026-04-15", "シチュー");
+      });
+      expect(result.current.data.meals["2026-04-15"]?.lines[0]?.cart).toBeUndefined();
+    });
+
+    it("cart 状態は localStorage に永続化される（再読込で復元）", () => {
+      const { result, unmount } = renderHook(() => useAppData());
+      act(() => {
+        result.current.setMealsText("2026-04-15", "カレー");
+      });
+      act(() => {
+        result.current.toggleCart("2026-04-15", 0);
+      });
+      unmount();
+      const { result: result2 } = renderHook(() => useAppData());
+      expect(result2.current.data.meals["2026-04-15"]?.lines[0]?.cart).toBe(true);
+    });
+
+    it("legacy データ（cart フィールドなし）でも安全に読み込める", () => {
+      const legacy = {
+        version: 1,
+        meals: {
+          "2026-04-10": {
+            lines: [{ text: "豚バラ大根", done: false }],
+          },
+        },
+        stock: [],
+        favorites: [],
+      };
+      localStorage.setItem("cookpato:data:v1", JSON.stringify(legacy));
+      const { result } = renderHook(() => useAppData());
+      expect(result.current.data.meals["2026-04-10"]?.lines[0]?.cart).toBeUndefined();
+      expect(result.current.data.meals["2026-04-10"]?.lines[0]?.text).toBe("豚バラ大根");
+    });
+  });
+
   describe("お気に入りマーカー（正規化共有）", () => {
     it("toggleFavorite で正規化キーが favorites に追加される", () => {
       const { result } = renderHook(() => useAppData());

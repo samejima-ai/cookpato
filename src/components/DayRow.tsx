@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import cartImg from "../assets/cart.png";
 import emptyDayImg from "../assets/empty-day.png";
 import favoriteImg from "../assets/favorite.png";
 import { useAutoShrink } from "../hooks/useAutoShrink";
@@ -21,6 +22,7 @@ type Props = {
   onTextChange: (text: string) => void;
   onToggleLine: (lineIndex: number) => void;
   onToggleFavorite: (lineIndex: number) => void;
+  onToggleCart: (lineIndex: number) => void;
   onDeleteLine: (lineIndex: number) => void;
   /** ちょいメモ（料理行とは別枠）の更新 */
   onMemoChange: (text: string) => void;
@@ -46,6 +48,7 @@ export function DayRow({
   onTextChange,
   onToggleLine,
   onToggleFavorite,
+  onToggleCart,
   onDeleteLine,
   onMemoChange,
   onActiveQueryChange,
@@ -208,10 +211,12 @@ export function DayRow({
                       text={line.text}
                       done={line.done}
                       favorite={favoriteKeys.has(favoriteKey(line.text))}
+                      cart={line.cart === true}
                       wobble={wobbleIndex === idx}
                       rowRef={wobbleIndex === idx ? wobbleRowRef : undefined}
                       onToggle={() => onToggleLine(idx)}
                       onToggleFavorite={() => onToggleFavorite(idx)}
+                      onToggleCart={() => onToggleCart(idx)}
                       onLongPress={() => setWobbleIndex(idx)}
                       onRequestDelete={() => {
                         setWobbleIndex(null);
@@ -243,12 +248,15 @@ type LineItemProps = {
   text: string;
   done: boolean;
   favorite: boolean;
+  /** 買い物マーカー（行ごと、妻の手動視覚マーキング） */
+  cart: boolean;
   /** 削除モード（長押し突入）中か。true の間だけ ✕ ボタンを表示＋行を揺らす。 */
   wobble: boolean;
   /** wobble 中の外タップ判定用に親が渡す `<li>` 参照（wobble=false のときは未指定） */
   rowRef?: React.Ref<HTMLLIElement>;
   onToggle: () => void;
   onToggleFavorite: () => void;
+  onToggleCart: () => void;
   /** 料理名エリアを長押しされたとき。親は対応行を wobble 状態に遷移させる。 */
   onLongPress: () => void;
   onRequestDelete: () => void;
@@ -276,10 +284,12 @@ function LineItem({
   text,
   done,
   favorite,
+  cart,
   wobble,
   rowRef,
   onToggle,
   onToggleFavorite,
+  onToggleCart,
   onLongPress,
   onRequestDelete,
 }: LineItemProps) {
@@ -292,6 +302,11 @@ function LineItem({
     e.stopPropagation();
     tapFeedback();
     onToggleFavorite();
+  });
+  const handleCart = useDebouncedTap((e: React.MouseEvent) => {
+    e.stopPropagation();
+    tapFeedback();
+    onToggleCart();
   });
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -352,6 +367,19 @@ function LineItem({
           {text}
         </span>
       </div>
+      <button
+        type="button"
+        onClick={handleCart}
+        className="w-11 h-11 flex items-center justify-center shrink-0"
+        aria-label={cart ? "買い物マーク解除" : "買い物マークを付ける"}
+        aria-pressed={cart}
+      >
+        {cart ? (
+          <img src={cartImg} alt="" aria-hidden="true" className="w-6 h-6" />
+        ) : (
+          <span className="w-5 h-5 text-neutral-300 text-base leading-none">🛒</span>
+        )}
+      </button>
       <button
         type="button"
         onClick={handleFavorite}

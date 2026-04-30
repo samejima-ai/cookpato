@@ -41,6 +41,7 @@ function baseProps() {
     onTextChange: () => {},
     onToggleLine: () => {},
     onToggleFavorite: () => {},
+    onToggleCart: () => {},
     onDeleteLine: () => {},
     onMemoChange: () => {},
   };
@@ -69,6 +70,66 @@ describe("DayRow", () => {
       const favoriteButtons = screen.getAllByRole("button", { name: /お気に入り/ });
       expect(favoriteButtons[0]?.getAttribute("aria-pressed")).toBe("true");
       expect(favoriteButtons[1]?.getAttribute("aria-pressed")).toBe("false");
+    });
+  });
+
+  describe("買い物マーカー（行ごとの手動マーキング）", () => {
+    it("cart=true の行はマーカーが立つ（aria-pressed）", () => {
+      render(
+        <DayRow
+          {...baseProps()}
+          day={{
+            lines: [
+              { text: "豚バラ大根", done: false, cart: true },
+              { text: "サラダ", done: false },
+            ],
+          }}
+        />,
+      );
+      const cartButtons = screen.getAllByRole("button", { name: /買い物マーク/ });
+      expect(cartButtons[0]?.getAttribute("aria-pressed")).toBe("true");
+      expect(cartButtons[1]?.getAttribute("aria-pressed")).toBe("false");
+    });
+
+    it("買い物マーカーボタンタップで onToggleCart(idx) が呼ばれる", () => {
+      const onToggleCart = vi.fn();
+      render(
+        <DayRow
+          {...baseProps()}
+          day={makeDay([{ text: "豚バラ大根" }, { text: "サラダ" }])}
+          onToggleCart={onToggleCart}
+        />,
+      );
+      const cartButtons = screen.getAllByRole("button", { name: /買い物マーク/ });
+      fireEvent.click(cartButtons[1] as HTMLElement);
+      expect(onToggleCart).toHaveBeenCalledWith(1);
+    });
+
+    it("買い物マーカーボタンは♡（お気に入り）の左隣にある", () => {
+      render(<DayRow {...baseProps()} day={makeDay([{ text: "豚バラ大根" }])} />);
+      const cartBtn = screen.getByRole("button", { name: /買い物マーク/ });
+      const favBtn = screen.getByRole("button", { name: /お気に入り/ });
+      // 兄弟順序：DOM 上で cart が favorite より前に出現する
+      const li = cartBtn.closest("li");
+      if (!li) throw new Error("li not found");
+      const buttons = Array.from(li.querySelectorAll("button")) as HTMLElement[];
+      expect(buttons.indexOf(cartBtn)).toBeLessThan(buttons.indexOf(favBtn));
+    });
+
+    it("買い物マーカーは♡（お気に入り）と独立してトグルできる", () => {
+      const onToggleCart = vi.fn();
+      const onToggleFavorite = vi.fn();
+      render(
+        <DayRow
+          {...baseProps()}
+          day={makeDay([{ text: "豚バラ大根" }])}
+          onToggleCart={onToggleCart}
+          onToggleFavorite={onToggleFavorite}
+        />,
+      );
+      fireEvent.click(screen.getByRole("button", { name: /買い物マーク/ }));
+      expect(onToggleCart).toHaveBeenCalledTimes(1);
+      expect(onToggleFavorite).not.toHaveBeenCalled();
     });
   });
 

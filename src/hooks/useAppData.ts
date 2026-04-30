@@ -8,7 +8,7 @@ import { generateId } from "../lib/id";
 import { favoriteKey } from "../lib/normalize";
 import { loadData, saveData } from "../lib/storage";
 import { isWeekComplete } from "../lib/week";
-import type { AppData, DateKey, DayMeals } from "../types";
+import type { AppData, DateKey, DayMeals, MealLine } from "../types";
 
 export type AppDataApi = {
   data: AppData;
@@ -22,6 +22,8 @@ export type AppDataApi = {
   deleteLine: (date: DateKey, lineIndex: number) => void;
   /** お気に入りトグル。同じ料理（正規化テキスト一致）が別日にあれば共通でマーキングされる */
   toggleFavorite: (date: DateKey, lineIndex: number) => void;
+  /** 買い物マーカーのトグル。行ごと（その日のその行のみ）に閉じる手動マーキング */
+  toggleCart: (date: DateKey, lineIndex: number) => void;
   /** ストック追加。qty 省略時は 1 */
   addStock: (text: string, qty?: number) => void;
   /** ストックの qty を 1 増やす */
@@ -44,14 +46,18 @@ export type AppDataApi = {
   commitMealsEdit: (date: DateKey) => void;
 };
 
-/** 入力テキストを lines に変換（完了状態は同一テキストのみ維持、それ以外リセット） */
+/** 入力テキストを lines に変換（完了/買い物マーカーは同一テキストのみ維持、それ以外リセット） */
 function textToLines(text: string, previous: DayMeals | undefined): DayMeals {
   const rawLines = text.split("\n");
   const prevLines = previous?.lines ?? [];
   const lines = rawLines.map((raw, i) => {
     const prev = prevLines[i];
-    const done = prev && prev.text === raw ? prev.done : false;
-    return { text: raw, done };
+    const sameText = prev && prev.text === raw;
+    const done = sameText ? prev.done : false;
+    const line: MealLine = { text: raw, done };
+    // テキスト一致行のみ買い物マーカーを引き継ぐ（テキスト変更でリセットされる）
+    if (sameText && prev.cart) line.cart = true;
+    return line;
   });
   const next: DayMeals = { lines };
   if (previous?.memo) next.memo = previous.memo;
@@ -226,6 +232,31 @@ export function useAppData(): AppDataApi {
     });
   }, []);
 
+  const toggleCart = useCallback((date: DateKey, lineIndex: number) => {
+    setState((prev) => {
+      const day = prev.data.meals[date];
+      if (!day) return prev;
+      const targetLine = day.lines[lineIndex];
+      if (!targetLine || targetLine.text === "") return prev;
+      const nextLines = day.lines.map((line, i) => {
+        if (i !== lineIndex) return line;
+        const next: MealLine = { text: line.text, done: line.done };
+        // OFF→ON のときだけ cart を立てる。ON→OFF は未定義に戻して JSON 表現を最小化する
+        if (!line.cart) next.cart = true;
+        return next;
+      });
+      const nextDay: DayMeals = { lines: nextLines };
+      if (day.memo) nextDay.memo = day.memo;
+      return {
+        ...prev,
+        data: {
+          ...prev.data,
+          meals: { ...prev.data.meals, [date]: nextDay },
+        },
+      };
+    });
+  }, []);
+
   const toggleFavorite = useCallback((date: DateKey, lineIndex: number) => {
     setState((prev) => {
       const day = prev.data.meals[date];
@@ -299,6 +330,7 @@ export function useAppData(): AppDataApi {
     toggleLine,
     deleteLine,
     toggleFavorite,
+    toggleCart,
     addStock,
     incStock,
     decStock,
