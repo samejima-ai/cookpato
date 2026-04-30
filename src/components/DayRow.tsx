@@ -375,7 +375,7 @@ function LineItem({
         aria-pressed={cart}
       >
         {cart ? (
-          <img src={cartImg} alt="" aria-hidden="true" className="w-6 h-6" />
+          <img src={cartImg} alt="" aria-hidden="true" className="w-10 h-10" />
         ) : (
           <span className="w-5 h-5 text-base leading-none opacity-30">🛒</span>
         )}
@@ -388,7 +388,7 @@ function LineItem({
         aria-pressed={favorite}
       >
         {favorite ? (
-          <img src={favoriteImg} alt="" aria-hidden="true" className="w-6 h-6" />
+          <img src={favoriteImg} alt="" aria-hidden="true" className="w-10 h-10" />
         ) : (
           <span className="w-5 h-5 text-neutral-300 text-base leading-none">♡</span>
         )}
