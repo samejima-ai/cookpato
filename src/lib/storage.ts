@@ -92,9 +92,14 @@ function coerceMeals(raw: unknown): Record<string, DayMeals> {
             if (typeof l !== "object" || l === null) return null;
             const line = l as Record<string, unknown>;
             if (typeof line.text !== "string") return null;
-            return { text: line.text, done: line.done === true };
+            const result: { text: string; done: boolean; cart?: boolean } = {
+              text: line.text,
+              done: line.done === true,
+            };
+            if (line.cart === true) result.cart = true;
+            return result;
           })
-          .filter((x): x is { text: string; done: boolean } => x !== null)
+          .filter((x): x is { text: string; done: boolean; cart?: boolean } => x !== null)
       : [];
     const day: DayMeals = { lines };
     if (typeof v.memo === "string" && v.memo !== "") day.memo = v.memo;
