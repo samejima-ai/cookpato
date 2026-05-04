@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import cartImg from "../assets/shimaenaga-cart.png";
 import emptyDayImg from "../assets/empty-day.png";
 import favoriteImg from "../assets/favorite.png";
+import cartImg from "../assets/shimaenaga-cart.png";
 import { useAutoShrink } from "../hooks/useAutoShrink";
 import { useComposition } from "../hooks/useComposition";
 import { useLongPress } from "../hooks/useLongPress";
@@ -133,11 +133,16 @@ export function DayRow({
         <div className={`text-sm font-medium ${labelColor}`}>
           <span>{formatDayLabel(dateKey)}</span>
         </div>
-        {holidayName && (
-          <div className="text-xs text-red-500 mt-0.5 leading-tight">{holidayName}</div>
-        )}
+        {holidayName && <HolidayLabel name={holidayName} />}
         {isToday && <div className="text-xs text-yellow-700 mt-0.5">今日</div>}
-        <MemoField dateKey={dateKey} value={day?.memo ?? ""} onChange={onMemoChange} />
+        {/* iOS Safari の IME 多重入力バグ対策として、key={dateKey} で日付ごとに input を再マウントし
+            uncontrolled パターン（defaultValue）を採る。SPEC.md「ちょいメモ」参照。 */}
+        <MemoField
+          key={dateKey}
+          dateKey={dateKey}
+          value={day?.memo ?? ""}
+          onChange={onMemoChange}
+        />
       </div>
       <div className="flex-1 min-w-0">
         {editing ? (
@@ -520,6 +525,39 @@ function caretLine(value: string, caret: number): string {
   return value.slice(start, end);
 }
 
+/**
+ * 祝日名のラベル。日付列幅（96px）に収まらない長さ（例：「体育の日（スポーツの日）」
+ * 「勤労感謝の日 振替休日」）でも 1 行表示を維持するため、`useAutoShrink` で
+ * フォントサイズを動的縮小する（CLAUDE.md「文字列は1行表示」原則準拠）。
+ * ResizeObserver で容器幅変化にも追従するため、画面サイズ変化（端末違い・横画面）でも崩れない。
+ */
+function HolidayLabel({ name }: { name: string }) {
+  const BASE_PX = 12; // text-xs 相当
+  const { containerRef, measureRef, fontPx } = useAutoShrink({
+    value: name,
+    basePx: BASE_PX,
+    minPx: 8,
+  });
+  return (
+    <div ref={containerRef} className="relative w-full overflow-hidden mt-0.5">
+      <span
+        ref={measureRef}
+        aria-hidden="true"
+        className="invisible absolute top-0 left-0 whitespace-nowrap"
+        style={{ fontSize: `${BASE_PX}px` }}
+      >
+        {name}
+      </span>
+      <div
+        style={{ fontSize: `${fontPx}px` }}
+        className="text-red-500 leading-tight whitespace-nowrap overflow-hidden"
+      >
+        {name}
+      </div>
+    </div>
+  );
+}
+
 type MemoFieldProps = {
   dateKey: DateKey;
   value: string;
@@ -533,6 +571,12 @@ type MemoFieldProps = {
  *   （Excel の「縮小して全体を表示」に相当。横スクロールを避ける）
  * - 空のときは小さくプレースホルダ「メモ」のみ
  * - 料理行の編集モードとは領域分離（stopPropagation）
+ *
+ * 入力は **uncontrolled**（`defaultValue`）。
+ * iOS Safari の IME 中に親 state を React 経由で input.value に書き戻すと、
+ * 未確定文字が消えたり多重反映されるため、value プロップでは制御しない。
+ * 親 state は永続化のためだけに更新する。日付切替時の初期値同期は呼び出し側の
+ * `key={dateKey}` による再マウントで担保する（SPEC.md「ちょいメモ」参照）。
  */
 function MemoField({ dateKey, value, onChange }: MemoFieldProps) {
   const BASE_PX = 14;
@@ -563,7 +607,7 @@ function MemoField({ dateKey, value, onChange }: MemoFieldProps) {
       </span>
       <input
         type="text"
-        value={value}
+        defaultValue={value}
         onCompositionStart={ime.onCompositionStart}
         onCompositionEnd={(e) => {
           ime.onCompositionEnd();

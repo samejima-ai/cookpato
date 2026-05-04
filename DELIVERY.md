@@ -165,3 +165,39 @@ npm run dev   # http://localhost:5173 で開く
 - 検索結果が 20件 MAX で打ち切られているため、「もっと遡りたい」ニーズが出た場合に件数上限を上げるかページングを入れるか判断が必要。
 - 今日以降の未来日に品を入れた場合の挙動（計画用途）は SPEC 通りに動くが、UI 上「今日」ハイライトだけで区別しているので、計画／実績を分ける要望が出たら別軸の設計になる。
 - 完了率のサマリや週次ビューの要望が上がった場合、それは別スキルで別ページに切るほうが「メモ帳の軽さ」原則を守れる。
+
+---
+
+## サイクル履歴
+
+### 2026-05-04: ストック行改修・名前編集・メモバグ修正・長押しドラッグ並び替え（L0 #17 → L1）
+
+L0 サイクル（PR #17、INSTRUCTIONS.md）に従い 4 タスクを実装。
+
+#### 変更点
+- **ストック行 1 行収納**：`StockList.tsx` を全面書き換え。`useAutoShrink` で名前を 1 行表示。`[−][個数][＋]` を 36×36px（SPEC「ストックリスト」の 44px 例外）、個数表示を 28×36px に縮小。
+- **ストック名編集**：名前タップで `StockNameEditInput`（uncontrolled input）に切替。blur／Enter で確定、Escape でキャンセル、空文字確定は無視（既存名維持）。`useAppData.updateStockText(id, text)` を追加。
+- **メモ入力バグ修正**：`MemoField` を controlled（`value`）→ uncontrolled（`defaultValue`）に変更。呼び出し側で `key={dateKey}` を付与し日付切替時に再マウント。iOS Safari の IME 多重入力／入力消失バグを構造的に回避。
+- **長押しドラッグ並び替え**：`↑↓` ボタン廃止、`moveStockUp/Down` API 削除。`reorderStock(fromIndex, toIndex)` API 追加。500ms 長押し成立で `dragState` セット、document level の `pointermove` / `pointerup` / `pointercancel` 経由で `toIndex` 追跡＆並び替え確定。`setPointerCapture` は使わない（iOS Safari で document に pointer events が届かなくなるため）。短時間タップ（長押し未成立）は編集モード進入として分岐。Escape／行外タップで解除。
+- **ドラッグ中アニメーション**：toIndex 変化のたびに全行が「離した時のレイアウト」へ 150ms ease-out で snap（ドラッグ行も含む）。確定時は FLIP の起点が既に snap 後位置のため自然に着地。
+- **キーボード操作**：名前領域に `role="button"` / `tabIndex={0}` / `Enter`・`Space` ハンドラを追加し、編集モード進入をキーボードからも可能にした。
+- **ドラッグ中の自動スクロール**：`max-h-48` を超える長いリストでも、指がスクロール容器の上下端 40px 以内にいると自動スクロールする。リスト全体で並び替え可能。
+
+#### センサー結果（全 5 項目 pass）
+| コマンド | 結果 |
+|---|---|
+| `npm run typecheck` | ✅ |
+| `npm run lint` | ✅ |
+| `npm run format:check` | ✅ |
+| `npm test` | ✅ 131/131（前回 33 件 → 増分 98 件）|
+| `npm run build` | ✅（dist 358.54 kB JS / gzip 83.03 kB）|
+
+#### 既知未検証事項
+- 実機 iPhone 11 Safari での長押しドラッグ挙動（jsdom では document level の pointer events / touchmove preventDefault / 自動スクロールをフルにはシミュレートしていない）。Vercel Preview デプロイで実機確認推奨。
+- メモ入力バグ修正の効果も実機 iOS Safari でフリック入力の再現確認が望ましい。
+- 長押し中に指を意図せず大きく動かすとブラウザ側のスクロール判定が先行し `pointercancel` で長押しが死ぬ可能性。`touch-action: pan-y` で縦スクロールを許可している妥協のためで、想定範囲内。
+
+#### 体制事後評価（M1 単体モード）
+- 妥当。INSTRUCTIONS.md が機能×条件粒度で確定していたため、自走で完遂できた。
+- 独立検証 agent の不在による品質劣化はなし（SPEC との照合は自己検証で十分）。
+- L2 発動閾値には依然として遠い（変更ファイル数 4、新規行 +400 程度）。次回サイクルも M1 で問題ない見込み。
