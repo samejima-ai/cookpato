@@ -134,8 +134,52 @@ export function StockList({ api }: Props) {
   //   に少し指が動いても pointercancel が発火しないようにする（StockNameDisplay 側）
   // - document level handler を passive: false で attach し、preventDefault で確実に
   //   ブラウザのスクロール/拡大ジェスチャを抑止する
+  //
+  // ドラッグ中の他の行のリアルタイム移動（150ms ease-out で隙間を空ける）も
+  // ここで処理する。各行の transform は React state ではなく DOM 直接操作で
+  // 高頻度の pointermove に対応する。依存は session 単位で安定な `dragState?.id`
+  // のみに絞り、session 中の toIndex 変化では useEffect を再実行させない。
+  // biome-ignore lint/correctness/useExhaustiveDependencies: dragState?.id で session 単位の生存期間を表現。toIndex 変化は dragInfoRef + DOM 直接で扱う
   useEffect(() => {
     if (dragState === null) return;
+
+    // 行ピッチ計測（隣り合う li の top 差。space-y-1 = 4px 込み）
+    const rowEntries = Array.from(liRefs.current.entries());
+    let rowPitch = 44;
+    if (rowEntries.length >= 2 && rowEntries[0] && rowEntries[1]) {
+      const a = rowEntries[0][1].getBoundingClientRect().top;
+      const b = rowEntries[1][1].getBoundingClientRect().top;
+      rowPitch = b - a;
+    } else if (rowEntries[0]) {
+      rowPitch = rowEntries[0][1].offsetHeight + 4;
+    }
+
+    /** ドラッグ中の他の行に挿入位置のシフトを適用する */
+    const applyShifts = (fromIndex: number, toIndex: number) => {
+      api.data.stock.forEach((item, i) => {
+        const li = liRefs.current.get(item.id);
+        if (!li) return;
+        if (i === fromIndex) {
+          // ドラッグ行は元の位置に置きつつ shadow + opacity で浮かせる（StockRow 側）
+          li.style.transform = "";
+        } else if (fromIndex < toIndex && i > fromIndex && i <= toIndex) {
+          // 下向きドラッグ：間にある行を上に詰める（ドラッグ行が抜けた隙間を埋める）
+          li.style.transform = `translateY(${-rowPitch}px)`;
+        } else if (fromIndex > toIndex && i < fromIndex && i >= toIndex) {
+          // 上向きドラッグ：間にある行を下に押す（ドラッグ行が割り込む隙間を作る）
+          li.style.transform = `translateY(${rowPitch}px)`;
+        } else {
+          li.style.transform = "";
+        }
+      });
+    };
+
+    // ドラッグ中の各 li に transition を適用（pointermove での transform 切替を滑らかに）
+    liRefs.current.forEach((li) => {
+      li.style.transition = "transform 150ms ease-out";
+    });
+    applyShifts(dragState.fromIndex, dragState.toIndex);
+
     const onMove = (e: PointerEvent) => {
       const pid = activePointerIdRef.current;
       if (pid !== null && e.pointerId !== pid) return;
@@ -146,15 +190,28 @@ export function StockList({ api }: Props) {
       if (next !== drag.toIndex) {
         dragInfoRef.current = { ...drag, toIndex: next };
         setDragState((prev) => (prev === null ? prev : { ...prev, toIndex: next }));
+        applyShifts(drag.fromIndex, next);
       }
     };
     const finishDrag = () => {
       const drag = dragInfoRef.current;
+      // 1) 全 li の transform を即時クリア（並び替え後の FLIP 起点を「並び替え前の元の位置」に揃えるため）
+      liRefs.current.forEach((li) => {
+        li.style.transition = "none";
+        li.style.transform = "";
+      });
+      // 2) クリア後（= 並び替え前の元の位置）の top を FLIP 用に保存
+      const newPrev = new Map<string, number>();
+      liRefs.current.forEach((li, id) => {
+        newPrev.set(id, li.getBoundingClientRect().top);
+      });
+      prevRectsRef.current = newPrev;
+      dragInfoRef.current = null;
+      activePointerIdRef.current = null;
+      // 3) 並び替え反映（→ React 再レンダ → useLayoutEffect FLIP）
       if (drag !== null && drag.fromIndex !== drag.toIndex) {
         api.reorderStock(drag.fromIndex, drag.toIndex);
       }
-      dragInfoRef.current = null;
-      activePointerIdRef.current = null;
       setDragState(null);
     };
     const onUp = (e: PointerEvent) => {
@@ -166,6 +223,11 @@ export function StockList({ api }: Props) {
       if (e.key === "Escape") {
         dragInfoRef.current = null;
         activePointerIdRef.current = null;
+        // transform クリア
+        liRefs.current.forEach((li) => {
+          li.style.transition = "none";
+          li.style.transform = "";
+        });
         setDragState(null);
       }
     };
@@ -179,7 +241,7 @@ export function StockList({ api }: Props) {
       document.removeEventListener("pointercancel", onUp);
       document.removeEventListener("keydown", onKey);
     };
-  }, [dragState, api, computeToIndex]);
+  }, [dragState?.id]);
 
   const handleRowPointerDown = useCallback(
     (item: StockItem, idx: number, e: React.PointerEvent<HTMLDivElement>) => {
