@@ -43,7 +43,7 @@ export function StockList({ api }: Props) {
   // dragState を document handler 内から最新値で参照するための ref。
   // setState は非同期で document handler 登録より遅れる可能性があるため、ref と二重で保持する。
   const dragInfoRef = useRef<{ id: string; fromIndex: number; toIndex: number } | null>(null);
-  // 現在ポインタイベントを処理しているターゲット要素（setPointerCapture 解放用）
+  // ドラッグ中の pointerId（複数指タッチで誤動作させないため）
   const activePointerIdRef = useRef<number | null>(null);
 
   function handleAdd() {
@@ -94,12 +94,20 @@ export function StockList({ api }: Props) {
   }, []);
 
   // dragState がセットされたら document に pointermove/up を仕掛けて並び替えを追跡する。
-  // li の onPointerMove に頼ると iOS Safari で pointer events の発火が不安定なため、
-  // document レベルでイベントを横取りし、touchmove のスクロールも passive: false で抑止する。
+  //
+  // iOS Safari で並び替えが動かなかった原因と対処：
+  // - 旧実装は li 側で `setPointerCapture` を呼んでいたため、後続の pointermove が
+  //   document に届かない経路があった。setPointerCapture は廃止
+  // - touch-action は touchstart 時点で評価されるため、`isDragging` 切替後に CSS を
+  //   変えても遅い。名前領域には常時 `touch-action: none` を当てて、長押し中（500ms）
+  //   に少し指が動いても pointercancel が発火しないようにする（StockNameDisplay 側）
+  // - document level handler を passive: false で attach し、preventDefault で確実に
+  //   ブラウザのスクロール/拡大ジェスチャを抑止する
   useEffect(() => {
     if (dragState === null) return;
     const onMove = (e: PointerEvent) => {
-      // ドラッグ中はブラウザのスクロール・タップハイライトを抑止
+      const pid = activePointerIdRef.current;
+      if (pid !== null && e.pointerId !== pid) return;
       e.preventDefault();
       const drag = dragInfoRef.current;
       if (drag === null) return;
@@ -119,24 +127,14 @@ export function StockList({ api }: Props) {
       setDragState(null);
     };
     const onUp = (e: PointerEvent) => {
-      // pointerCapture を解放
       const pid = activePointerIdRef.current;
-      if (pid !== null) {
-        for (const li of liRefs.current.values()) {
-          try {
-            if (li.hasPointerCapture(pid)) li.releasePointerCapture(pid);
-          } catch {
-            // ignore
-          }
-        }
-      }
-      // ドラッグ中の pointer 以外（別指）は無視
       if (pid !== null && e.pointerId !== pid) return;
       finishDrag();
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         dragInfoRef.current = null;
+        activePointerIdRef.current = null;
         setDragState(null);
       }
     };
@@ -156,13 +154,8 @@ export function StockList({ api }: Props) {
     (item: StockItem, idx: number, e: React.PointerEvent<HTMLDivElement>) => {
       if (editingId !== null || dragInfoRef.current !== null) return;
       if (e.pointerType === "mouse" && e.button !== 0) return;
-      const pointerId = e.pointerId;
-      try {
-        e.currentTarget.setPointerCapture(pointerId);
-      } catch {
-        // テスト環境では未対応。無視
-      }
-      activePointerIdRef.current = pointerId;
+      // setPointerCapture は呼ばない（呼ぶと document に pointermove が届かなくなる経路がある）
+      activePointerIdRef.current = e.pointerId;
       cancelLongPress();
       const startId = item.id;
       const startIndex = idx;
@@ -195,8 +188,11 @@ export function StockList({ api }: Props) {
   const handleRowPointerCancel = useCallback(
     (_item: StockItem, _e: React.PointerEvent<HTMLDivElement>) => {
       cancelLongPress();
-      activePointerIdRef.current = null;
-      // 長押し成立後の cancel は document handler 側の onUp（pointercancel）が処理
+      // 長押し成立後の cancel は document handler 側の onUp（pointercancel）が処理。
+      // 長押し成立前の cancel ならタイマーだけ消して終わり。
+      if (dragInfoRef.current === null) {
+        activePointerIdRef.current = null;
+      }
     },
     [cancelLongPress],
   );
@@ -358,8 +354,6 @@ function StockRow({
         else liRefs.current.delete(item.id);
       }}
       className={liClass}
-      // dragging 中は touch-action: none でブラウザのスクロール挙動を抑止する
-      style={isDragging ? { touchAction: "none" } : undefined}
     >
       <button
         type="button"
@@ -502,6 +496,11 @@ function StockNameDisplay({
     <div
       ref={containerRef}
       className="flex-1 min-w-0 self-center relative overflow-hidden pl-1 flex items-center gap-1 cursor-text"
+      // touch-action: none は touchstart 時点で評価される。長押し中（500ms）に
+      // 指が少しでも動くと pointercancel でドラッグが死ぬのを防ぐため、常時適用する。
+      // 名前領域でだけスクロール不可になるが、ストック容器のスクロールは
+      // ボタン領域や行間で発火できるので運用上問題ない。
+      style={{ touchAction: "none" }}
       onPointerDown={onPointerDown}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerCancel}
