@@ -98,3 +98,4 @@ Layer 1 での変更禁止。変更が必要な場合は仕様レビュー結果
 - 仕様: INDEX.md（→ SPEC.md / DONT.md）
 - センサー: sensors/computational.md, sensors/inferential.md
 - スキル: .claude/skills/layer1-autonomous-dev/
+- 開発ノート: docs/IOS-SAFARI-NOTES.md（iOS Safari の落とし穴集 — IME × controlled input、setPointerCapture、touch-action、長押し領域外リリース）
