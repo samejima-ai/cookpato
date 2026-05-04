@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import cartImg from "../assets/shimaenaga-cart.png";
 import emptyDayImg from "../assets/empty-day.png";
 import favoriteImg from "../assets/favorite.png";
+import cartImg from "../assets/shimaenaga-cart.png";
 import { useAutoShrink } from "../hooks/useAutoShrink";
 import { useComposition } from "../hooks/useComposition";
 import { useLongPress } from "../hooks/useLongPress";
@@ -137,7 +137,14 @@ export function DayRow({
           <div className="text-xs text-red-500 mt-0.5 leading-tight">{holidayName}</div>
         )}
         {isToday && <div className="text-xs text-yellow-700 mt-0.5">今日</div>}
-        <MemoField dateKey={dateKey} value={day?.memo ?? ""} onChange={onMemoChange} />
+        {/* iOS Safari の IME 多重入力バグ対策として、key={dateKey} で日付ごとに input を再マウントし
+            uncontrolled パターン（defaultValue）を採る。SPEC.md「ちょいメモ」参照。 */}
+        <MemoField
+          key={dateKey}
+          dateKey={dateKey}
+          value={day?.memo ?? ""}
+          onChange={onMemoChange}
+        />
       </div>
       <div className="flex-1 min-w-0">
         {editing ? (
@@ -533,6 +540,12 @@ type MemoFieldProps = {
  *   （Excel の「縮小して全体を表示」に相当。横スクロールを避ける）
  * - 空のときは小さくプレースホルダ「メモ」のみ
  * - 料理行の編集モードとは領域分離（stopPropagation）
+ *
+ * 入力は **uncontrolled**（`defaultValue`）。
+ * iOS Safari の IME 中に親 state を React 経由で input.value に書き戻すと、
+ * 未確定文字が消えたり多重反映されるため、value プロップでは制御しない。
+ * 親 state は永続化のためだけに更新する。日付切替時の初期値同期は呼び出し側の
+ * `key={dateKey}` による再マウントで担保する（SPEC.md「ちょいメモ」参照）。
  */
 function MemoField({ dateKey, value, onChange }: MemoFieldProps) {
   const BASE_PX = 14;
@@ -563,7 +576,7 @@ function MemoField({ dateKey, value, onChange }: MemoFieldProps) {
       </span>
       <input
         type="text"
-        value={value}
+        defaultValue={value}
         onCompositionStart={ime.onCompositionStart}
         onCompositionEnd={(e) => {
           ime.onCompositionEnd();

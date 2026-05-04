@@ -32,10 +32,10 @@ export type AppDataApi = {
   decStock: (id: string) => void;
   /** ストック削除（qty が 0 のときにユーザーが明示的に 0 ボタンを押したら呼ぶ） */
   removeStock: (id: string) => void;
-  /** ストック項目を 1 つ上に移動（先頭は no-op） */
-  moveStockUp: (id: string) => void;
-  /** ストック項目を 1 つ下に移動（末尾は no-op） */
-  moveStockDown: (id: string) => void;
+  /** ストック項目の表示テキストを書き換える。空文字（trim 後）は no-op（既存テキスト維持） */
+  updateStockText: (id: string, text: string) => void;
+  /** ストック並び替え：fromIndex の項目を toIndex の位置に移動する。境界外は no-op */
+  reorderStock: (fromIndex: number, toIndex: number) => void;
   /** 編集コミット時の「未達成 → 達成」遷移で日曜キーがセットされる演出トリガー。永続化しない */
   justCompletedSunday: DateKey | null;
   /** 「頑張ったね」演出の終了時に呼ぶ */
@@ -78,19 +78,16 @@ function linesAreEmpty(lines: DayMeals["lines"]): boolean {
  */
 type State = { data: AppData; justCompletedSunday: DateKey | null };
 
-/** ストックの指定 id を delta 分（-1 で上、+1 で下）入れ替える。端では変化なし */
-function swapStock(prev: State, id: string, delta: -1 | 1): State {
+/** ストックを fromIndex から toIndex に並び替える。境界外なら変化なし */
+function reorderStockArray(prev: State, fromIndex: number, toIndex: number): State {
   const stock = prev.data.stock;
-  const idx = stock.findIndex((s) => s.id === id);
-  if (idx === -1) return prev;
-  const target = idx + delta;
-  if (target < 0 || target >= stock.length) return prev;
+  if (fromIndex < 0 || fromIndex >= stock.length) return prev;
+  if (toIndex < 0 || toIndex >= stock.length) return prev;
+  if (fromIndex === toIndex) return prev;
   const next = stock.slice();
-  const a = next[idx];
-  const b = next[target];
-  if (!a || !b) return prev;
-  next[idx] = b;
-  next[target] = a;
+  const [moved] = next.splice(fromIndex, 1);
+  if (!moved) return prev;
+  next.splice(toIndex, 0, moved);
   return { ...prev, data: { ...prev.data, stock: next } };
 }
 
@@ -315,12 +312,20 @@ export function useAppData(): AppDataApi {
     }));
   }, []);
 
-  const moveStockUp = useCallback((id: string) => {
-    setState((prev) => swapStock(prev, id, -1));
+  const updateStockText = useCallback((id: string, text: string) => {
+    const trimmed = text.trim();
+    if (trimmed === "") return;
+    setState((prev) => ({
+      ...prev,
+      data: {
+        ...prev.data,
+        stock: prev.data.stock.map((s) => (s.id === id ? { ...s, text: trimmed } : s)),
+      },
+    }));
   }, []);
 
-  const moveStockDown = useCallback((id: string) => {
-    setState((prev) => swapStock(prev, id, 1));
+  const reorderStock = useCallback((fromIndex: number, toIndex: number) => {
+    setState((prev) => reorderStockArray(prev, fromIndex, toIndex));
   }, []);
 
   return {
@@ -335,8 +340,8 @@ export function useAppData(): AppDataApi {
     incStock,
     decStock,
     removeStock,
-    moveStockUp,
-    moveStockDown,
+    updateStockText,
+    reorderStock,
     justCompletedSunday: state.justCompletedSunday,
     clearJustCompleted,
     beginMealsEdit,

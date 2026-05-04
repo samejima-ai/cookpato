@@ -271,88 +271,122 @@ describe("useAppData", () => {
       expect(result.current.data.stock[0]?.text).toBe("下味豚");
     });
 
-    describe("並び替え", () => {
-      it("moveStockUp で 1 つ上の項目と入れ替わる", () => {
+    describe("並び替え（reorderStock）", () => {
+      it("中間 → 先頭に移動できる", () => {
         const { result } = renderHook(() => useAppData());
         act(() => {
           result.current.addStock("A");
           result.current.addStock("B");
           result.current.addStock("C");
         });
-        const bId = result.current.data.stock[1]?.id ?? "";
         act(() => {
-          result.current.moveStockUp(bId);
+          result.current.reorderStock(1, 0);
         });
         expect(result.current.data.stock.map((s) => s.text)).toEqual(["B", "A", "C"]);
       });
 
-      it("moveStockDown で 1 つ下の項目と入れ替わる", () => {
+      it("中間 → 末尾に移動できる", () => {
         const { result } = renderHook(() => useAppData());
         act(() => {
           result.current.addStock("A");
           result.current.addStock("B");
           result.current.addStock("C");
         });
-        const bId = result.current.data.stock[1]?.id ?? "";
         act(() => {
-          result.current.moveStockDown(bId);
+          result.current.reorderStock(1, 2);
         });
         expect(result.current.data.stock.map((s) => s.text)).toEqual(["A", "C", "B"]);
       });
 
-      it("先頭で moveStockUp は no-op", () => {
-        const { result } = renderHook(() => useAppData());
-        act(() => {
-          result.current.addStock("A");
-          result.current.addStock("B");
-        });
-        const aId = result.current.data.stock[0]?.id ?? "";
-        act(() => {
-          result.current.moveStockUp(aId);
-        });
-        expect(result.current.data.stock.map((s) => s.text)).toEqual(["A", "B"]);
-      });
-
-      it("末尾で moveStockDown は no-op", () => {
-        const { result } = renderHook(() => useAppData());
-        act(() => {
-          result.current.addStock("A");
-          result.current.addStock("B");
-        });
-        const bId = result.current.data.stock[1]?.id ?? "";
-        act(() => {
-          result.current.moveStockDown(bId);
-        });
-        expect(result.current.data.stock.map((s) => s.text)).toEqual(["A", "B"]);
-      });
-
-      it("不明な id の場合は no-op", () => {
+      it("同じインデックス指定は no-op", () => {
         const { result } = renderHook(() => useAppData());
         act(() => {
           result.current.addStock("A");
           result.current.addStock("B");
         });
         act(() => {
-          result.current.moveStockUp("unknown-id");
-          result.current.moveStockDown("unknown-id");
+          result.current.reorderStock(0, 0);
         });
         expect(result.current.data.stock.map((s) => s.text)).toEqual(["A", "B"]);
       });
 
-      it("qty や個数ボタンの状態は移動後も保持される", () => {
+      it("境界外インデックスは no-op", () => {
+        const { result } = renderHook(() => useAppData());
+        act(() => {
+          result.current.addStock("A");
+          result.current.addStock("B");
+        });
+        act(() => {
+          result.current.reorderStock(-1, 0);
+          result.current.reorderStock(0, 5);
+          result.current.reorderStock(5, 0);
+        });
+        expect(result.current.data.stock.map((s) => s.text)).toEqual(["A", "B"]);
+      });
+
+      it("qty は移動後も保持される", () => {
         const { result } = renderHook(() => useAppData());
         act(() => {
           result.current.addStock("A", 5);
           result.current.addStock("B", 2);
         });
-        const aId = result.current.data.stock[0]?.id ?? "";
         act(() => {
-          result.current.moveStockDown(aId);
+          result.current.reorderStock(0, 1);
         });
         expect(result.current.data.stock[0]?.text).toBe("B");
         expect(result.current.data.stock[0]?.qty).toBe(2);
         expect(result.current.data.stock[1]?.text).toBe("A");
         expect(result.current.data.stock[1]?.qty).toBe(5);
+      });
+    });
+
+    describe("名前編集（updateStockText）", () => {
+      it("指定 id の text を更新できる", () => {
+        const { result } = renderHook(() => useAppData());
+        act(() => {
+          result.current.addStock("グラタン");
+        });
+        const id = result.current.data.stock[0]?.id ?? "";
+        act(() => {
+          result.current.updateStockText(id, "下味豚");
+        });
+        expect(result.current.data.stock[0]?.text).toBe("下味豚");
+      });
+
+      it("空文字（trim 後）は no-op で既存テキストが維持される", () => {
+        const { result } = renderHook(() => useAppData());
+        act(() => {
+          result.current.addStock("グラタン");
+        });
+        const id = result.current.data.stock[0]?.id ?? "";
+        act(() => {
+          result.current.updateStockText(id, "   ");
+        });
+        expect(result.current.data.stock[0]?.text).toBe("グラタン");
+      });
+
+      it("不明な id は no-op", () => {
+        const { result } = renderHook(() => useAppData());
+        act(() => {
+          result.current.addStock("A");
+          result.current.addStock("B");
+        });
+        act(() => {
+          result.current.updateStockText("unknown-id", "X");
+        });
+        expect(result.current.data.stock.map((s) => s.text)).toEqual(["A", "B"]);
+      });
+
+      it("qty は更新時に維持される", () => {
+        const { result } = renderHook(() => useAppData());
+        act(() => {
+          result.current.addStock("A", 3);
+        });
+        const id = result.current.data.stock[0]?.id ?? "";
+        act(() => {
+          result.current.updateStockText(id, "B");
+        });
+        expect(result.current.data.stock[0]?.qty).toBe(3);
       });
     });
   });

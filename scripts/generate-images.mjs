@@ -84,7 +84,7 @@ async function makeTransparentFromBlackBg(input, output, size) {
   for (let i = 0; i < data.length; i += 4) {
     const lum = Math.max(data[i], data[i + 1], data[i + 2]);
     if (lum < 30) data[i + 3] = 0;
-    else if (lum < 90) data[i + 3] = Math.round(data[i + 3] * (lum - 30) / 60);
+    else if (lum < 90) data[i + 3] = Math.round((data[i + 3] * (lum - 30)) / 60);
   }
   const buf = await sharp(data, {
     raw: { width: info.width, height: info.height, channels: 4 },
