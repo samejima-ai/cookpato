@@ -16,8 +16,14 @@ const LONG_PRESS_MS = 500;
 
 export function StockList({ api }: Props) {
   const [expanded, setExpanded] = useState(true);
-  const [draftName, setDraftName] = useState("");
+  // 追加 input の妥当性のみ state で持ち、値は uncontrolled な input から ref で読む。
+  // controlled (`value=`) にすると iOS Safari の IME 中に親 state 反映がスキップされた瞬間
+  // React が DOM 値を上書きし入力が消える（メモ欄と同じ問題）。
+  const [draftNameValid, setDraftNameValid] = useState(false);
+  // 追加成功時に input を空に戻すための再マウント用キー
+  const [draftResetKey, setDraftResetKey] = useState(0);
   const [draftQty, setDraftQty] = useState("");
+  const draftNameRef = useRef<HTMLInputElement | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   /**
    * 並び替え中の状態。長押し成立後にセットされ、リリースで確定される。
@@ -39,13 +45,15 @@ export function StockList({ api }: Props) {
   dragStateRef.current = dragState;
 
   function handleAdd() {
-    const name = draftName.trim();
+    const name = (draftNameRef.current?.value ?? "").trim();
     if (name === "") return;
     const parsed = Number.parseInt(draftQty, 10);
     const qty = Number.isFinite(parsed) && parsed >= 1 ? parsed : 1;
     api.addStock(name, qty);
-    setDraftName("");
     setDraftQty("");
+    setDraftNameValid(false);
+    // input を再マウントして DOM 値を空に戻す（uncontrolled なので value プロップでは制御できない）
+    setDraftResetKey((k) => k + 1);
   }
 
   // dragging 解除：行外タップ／Escape
@@ -226,18 +234,20 @@ export function StockList({ api }: Props) {
           </ul>
           <div className="flex gap-1">
             <input
+              key={draftResetKey}
+              ref={draftNameRef}
               type="text"
-              value={draftName}
+              defaultValue=""
               onCompositionStart={nameIme.onCompositionStart}
               onCompositionEnd={(e) => {
                 nameIme.onCompositionEnd();
                 const committed = e.currentTarget.value;
                 nameIme.markCommitted(committed);
-                setDraftName(committed);
+                setDraftNameValid(committed.trim() !== "");
               }}
               onChange={(e) => {
                 if (nameIme.shouldSkipChange(e.target.value, e.nativeEvent)) return;
-                setDraftName(e.target.value);
+                setDraftNameValid(e.target.value.trim() !== "");
               }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.nativeEvent.isComposing) {
@@ -269,7 +279,7 @@ export function StockList({ api }: Props) {
               type="button"
               onClick={handleAdd}
               className="px-3 py-2 rounded bg-neutral-800 text-white text-sm min-h-11 min-w-11 disabled:opacity-50 shrink-0"
-              disabled={draftName.trim() === ""}
+              disabled={!draftNameValid}
             >
               追加
             </button>
