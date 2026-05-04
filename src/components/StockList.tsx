@@ -40,9 +40,11 @@ export function StockList({ api }: Props) {
 
   const liRefs = useRef<Map<string, HTMLLIElement>>(new Map());
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // dragState を最新で参照するための ref（pointerup ハンドラが state クロージャでなく現在値を見るため）
-  const dragStateRef = useRef(dragState);
-  dragStateRef.current = dragState;
+  // dragState を document handler 内から最新値で参照するための ref。
+  // setState は非同期で document handler 登録より遅れる可能性があるため、ref と二重で保持する。
+  const dragInfoRef = useRef<{ id: string; fromIndex: number; toIndex: number } | null>(null);
+  // 現在ポインタイベントを処理しているターゲット要素（setPointerCapture 解放用）
+  const activePointerIdRef = useRef<number | null>(null);
 
   function handleAdd() {
     const name = (draftNameRef.current?.value ?? "").trim();
@@ -55,26 +57,6 @@ export function StockList({ api }: Props) {
     // input を再マウントして DOM 値を空に戻す（uncontrolled なので value プロップでは制御できない）
     setDraftResetKey((k) => k + 1);
   }
-
-  // dragging 解除：行外タップ／Escape
-  useEffect(() => {
-    if (dragState === null) return;
-    const onPointerDown = (e: PointerEvent) => {
-      const insideAnyRow = Array.from(liRefs.current.values()).some((li) =>
-        li.contains(e.target as Node),
-      );
-      if (!insideAnyRow) setDragState(null);
-    };
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setDragState(null);
-    };
-    document.addEventListener("pointerdown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [dragState]);
 
   // 長押しタイマーのクリーンアップ（unmount 時のみ）
   useEffect(
@@ -92,96 +74,129 @@ export function StockList({ api }: Props) {
   }, []);
 
   /** pointer Y から、ストック配列のどの位置に挿入するか（toIndex）を算出する */
-  const computeToIndex = useCallback(
-    (clientY: number, fallback: number): number => {
-      const stock = api.data.stock;
-      if (stock.length === 0) return fallback;
-      let result = stock.length - 1;
-      for (let i = 0; i < stock.length; i++) {
-        const item = stock[i];
-        if (!item) continue;
-        const li = liRefs.current.get(item.id);
-        if (!li) continue;
-        const rect = li.getBoundingClientRect();
-        if (clientY < rect.top + rect.height / 2) {
-          result = i;
-          break;
+  const computeToIndex = useCallback((clientY: number, fallback: number): number => {
+    const liMap = liRefs.current;
+    if (liMap.size === 0) return fallback;
+    // li の DOM 順は ul の children 順なので、配列順を保証するため Map を順序保持で渡す
+    const entries = Array.from(liMap.entries());
+    let result = entries.length - 1;
+    for (let i = 0; i < entries.length; i++) {
+      const entry = entries[i];
+      if (!entry) continue;
+      const li = entry[1];
+      const rect = li.getBoundingClientRect();
+      if (clientY < rect.top + rect.height / 2) {
+        result = i;
+        break;
+      }
+    }
+    return result;
+  }, []);
+
+  // dragState がセットされたら document に pointermove/up を仕掛けて並び替えを追跡する。
+  // li の onPointerMove に頼ると iOS Safari で pointer events の発火が不安定なため、
+  // document レベルでイベントを横取りし、touchmove のスクロールも passive: false で抑止する。
+  useEffect(() => {
+    if (dragState === null) return;
+    const onMove = (e: PointerEvent) => {
+      // ドラッグ中はブラウザのスクロール・タップハイライトを抑止
+      e.preventDefault();
+      const drag = dragInfoRef.current;
+      if (drag === null) return;
+      const next = computeToIndex(e.clientY, drag.fromIndex);
+      if (next !== drag.toIndex) {
+        dragInfoRef.current = { ...drag, toIndex: next };
+        setDragState((prev) => (prev === null ? prev : { ...prev, toIndex: next }));
+      }
+    };
+    const finishDrag = () => {
+      const drag = dragInfoRef.current;
+      if (drag !== null && drag.fromIndex !== drag.toIndex) {
+        api.reorderStock(drag.fromIndex, drag.toIndex);
+      }
+      dragInfoRef.current = null;
+      activePointerIdRef.current = null;
+      setDragState(null);
+    };
+    const onUp = (e: PointerEvent) => {
+      // pointerCapture を解放
+      const pid = activePointerIdRef.current;
+      if (pid !== null) {
+        for (const li of liRefs.current.values()) {
+          try {
+            if (li.hasPointerCapture(pid)) li.releasePointerCapture(pid);
+          } catch {
+            // ignore
+          }
         }
       }
-      return result;
-    },
-    [api.data.stock],
-  );
+      // ドラッグ中の pointer 以外（別指）は無視
+      if (pid !== null && e.pointerId !== pid) return;
+      finishDrag();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        dragInfoRef.current = null;
+        setDragState(null);
+      }
+    };
+    document.addEventListener("pointermove", onMove, { passive: false });
+    document.addEventListener("pointerup", onUp);
+    document.addEventListener("pointercancel", onUp);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+      document.removeEventListener("pointercancel", onUp);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [dragState, api, computeToIndex]);
 
   const handleRowPointerDown = useCallback(
     (item: StockItem, idx: number, e: React.PointerEvent<HTMLDivElement>) => {
-      if (editingId !== null || dragStateRef.current !== null) return;
-      // 右クリックなどは無視
+      if (editingId !== null || dragInfoRef.current !== null) return;
       if (e.pointerType === "mouse" && e.button !== 0) return;
+      const pointerId = e.pointerId;
       try {
-        e.currentTarget.setPointerCapture(e.pointerId);
+        e.currentTarget.setPointerCapture(pointerId);
       } catch {
-        // 一部環境（テスト）では setPointerCapture 未対応。無視して継続
+        // テスト環境では未対応。無視
       }
+      activePointerIdRef.current = pointerId;
       cancelLongPress();
+      const startId = item.id;
+      const startIndex = idx;
       longPressTimerRef.current = setTimeout(() => {
         longPressTimerRef.current = null;
         tapFeedback();
-        setDragState({ id: item.id, fromIndex: idx, toIndex: idx });
+        // ref を先に書いてから state 更新（document handler が次フレームで参照する）
+        dragInfoRef.current = { id: startId, fromIndex: startIndex, toIndex: startIndex };
+        setDragState({ id: startId, fromIndex: startIndex, toIndex: startIndex });
       }, LONG_PRESS_MS);
     },
     [editingId, cancelLongPress],
   );
 
-  const handleRowPointerMove = useCallback(
-    (item: StockItem, e: React.PointerEvent<HTMLDivElement>) => {
-      const drag = dragStateRef.current;
-      if (drag === null || drag.id !== item.id) return;
-      const next = computeToIndex(e.clientY, drag.fromIndex);
-      if (next !== drag.toIndex) {
-        setDragState({ ...drag, toIndex: next });
-      }
-    },
-    [computeToIndex],
-  );
-
   const handleRowPointerUp = useCallback(
-    (item: StockItem, e: React.PointerEvent<HTMLDivElement>) => {
+    (item: StockItem, _e: React.PointerEvent<HTMLDivElement>) => {
       const hadPendingTimer = longPressTimerRef.current !== null;
       cancelLongPress();
-      try {
-        if (e.currentTarget.hasPointerCapture(e.pointerId)) {
-          e.currentTarget.releasePointerCapture(e.pointerId);
-        }
-      } catch {
-        // ignore
-      }
-      const drag = dragStateRef.current;
-      if (drag !== null && drag.id === item.id) {
-        // 長押し成立 → 並び替え確定
-        if (drag.fromIndex !== drag.toIndex) {
-          api.reorderStock(drag.fromIndex, drag.toIndex);
-        }
-        setDragState(null);
-      } else if (hadPendingTimer && drag === null) {
-        // 長押し未成立（500ms 未満で離した） → タップ扱いで編集モード進入
-        if (editingId === null) setEditingId(item.id);
+      // 長押し成立済みなら document handler 側が確定処理する。ここでは何もしない。
+      if (dragInfoRef.current !== null) return;
+      activePointerIdRef.current = null;
+      // 長押し未成立（500ms 未満で離した）→ タップ扱いで編集モード進入
+      if (hadPendingTimer && editingId === null) {
+        setEditingId(item.id);
       }
     },
-    [api, cancelLongPress, editingId],
+    [cancelLongPress, editingId],
   );
 
   const handleRowPointerCancel = useCallback(
-    (_item: StockItem, e: React.PointerEvent<HTMLDivElement>) => {
+    (_item: StockItem, _e: React.PointerEvent<HTMLDivElement>) => {
       cancelLongPress();
-      try {
-        if (e.currentTarget.hasPointerCapture(e.pointerId)) {
-          e.currentTarget.releasePointerCapture(e.pointerId);
-        }
-      } catch {
-        // ignore
-      }
-      if (dragStateRef.current !== null) setDragState(null);
+      activePointerIdRef.current = null;
+      // 長押し成立後の cancel は document handler 側の onUp（pointercancel）が処理
     },
     [cancelLongPress],
   );
@@ -198,7 +213,9 @@ export function StockList({ api }: Props) {
         <span className="text-neutral-400">{expanded ? "▾" : "▸"}</span>
       </button>
       {expanded && (
-        <div className="px-3 pb-3 max-h-48 overflow-y-auto">
+        <div
+          className={`px-3 pb-3 max-h-48 ${dragState === null ? "overflow-y-auto" : "overflow-hidden"}`}
+        >
           {api.data.stock.length === 0 && (
             <div className="flex flex-col items-center py-3 text-neutral-400">
               <img src={emptyStockImg} alt="" aria-hidden="true" className="w-20 h-20 opacity-90" />
@@ -226,7 +243,6 @@ export function StockList({ api }: Props) {
                   api.removeStock(item.id);
                 }}
                 onPointerDown={(e) => handleRowPointerDown(item, idx, e)}
-                onPointerMove={(e) => handleRowPointerMove(item, e)}
                 onPointerUp={(e) => handleRowPointerUp(item, e)}
                 onPointerCancel={(e) => handleRowPointerCancel(item, e)}
               />
@@ -301,8 +317,8 @@ type StockRowProps = {
   onDec: () => void;
   onInc: () => void;
   onRemove: () => void;
+  /** 名前領域での pointerdown（長押し検出のトリガー）。pointermove は document level で追跡 */
   onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => void;
-  onPointerMove: (e: React.PointerEvent<HTMLDivElement>) => void;
   onPointerUp: (e: React.PointerEvent<HTMLDivElement>) => void;
   onPointerCancel: (e: React.PointerEvent<HTMLDivElement>) => void;
 };
@@ -328,7 +344,6 @@ function StockRow({
   onInc,
   onRemove,
   onPointerDown,
-  onPointerMove,
   onPointerUp,
   onPointerCancel,
 }: StockRowProps) {
@@ -400,7 +415,6 @@ function StockRow({
           item={item}
           isFavorite={isFavorite}
           onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerCancel}
         />
@@ -465,7 +479,6 @@ type StockNameDisplayProps = {
   item: StockItem;
   isFavorite: boolean;
   onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => void;
-  onPointerMove: (e: React.PointerEvent<HTMLDivElement>) => void;
   onPointerUp: (e: React.PointerEvent<HTMLDivElement>) => void;
   onPointerCancel: (e: React.PointerEvent<HTMLDivElement>) => void;
 };
@@ -475,7 +488,6 @@ function StockNameDisplay({
   item,
   isFavorite,
   onPointerDown,
-  onPointerMove,
   onPointerUp,
   onPointerCancel,
 }: StockNameDisplayProps) {
@@ -491,7 +503,6 @@ function StockNameDisplay({
       ref={containerRef}
       className="flex-1 min-w-0 self-center relative overflow-hidden pl-1 flex items-center gap-1 cursor-text"
       onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerCancel}
       aria-label={`${item.text}（タップで編集、長押しで並び替え）`}
