@@ -315,13 +315,18 @@ export function useAppData(): AppDataApi {
   const updateStockText = useCallback((id: string, text: string) => {
     const trimmed = text.trim();
     if (trimmed === "") return;
-    setState((prev) => ({
-      ...prev,
-      data: {
-        ...prev.data,
-        stock: prev.data.stock.map((s) => (s.id === id ? { ...s, text: trimmed } : s)),
-      },
-    }));
+    setState((prev) => {
+      const target = prev.data.stock.find((s) => s.id === id);
+      // id が無い／変更なしなら state を新規生成しない（保存・再レンダを発生させない）
+      if (!target || target.text === trimmed) return prev;
+      return {
+        ...prev,
+        data: {
+          ...prev.data,
+          stock: prev.data.stock.map((s) => (s.id === id ? { ...s, text: trimmed } : s)),
+        },
+      };
+    });
   }, []);
 
   const reorderStock = useCallback((fromIndex: number, toIndex: number) => {

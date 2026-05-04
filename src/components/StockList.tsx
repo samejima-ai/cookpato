@@ -47,6 +47,8 @@ export function StockList({ api }: Props) {
   const activePointerIdRef = useRef<number | null>(null);
   // 並び替え時のアニメーション用に、前回 paint 時の各行 top を保持する
   const prevRectsRef = useRef<Map<string, number>>(new Map());
+  // ドラッグ中の自動スクロール用：max-h-48 を超えるリストで上下端付近にドラッグした時に発火
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
 
   function handleAdd() {
     const name = (draftNameRef.current?.value ?? "").trim();
@@ -238,15 +240,62 @@ export function StockList({ api }: Props) {
         setDragState(null);
       }
     };
-    document.addEventListener("pointermove", onMove, { passive: false });
+    // ドラッグ中はネイティブの縦スクロールを抑止（touch-action: pan-y では touchmove
+    // のスクロールが効くため、明示的に preventDefault する）
+    const onTouchMove = (e: TouchEvent) => e.preventDefault();
+    // 自動スクロール：指がスクロール容器の上下端 40px 以内にいたら、毎フレーム少しずつスクロール
+    let autoScrollRaf: number | null = null;
+    let lastClientY = 0;
+    const AUTOSCROLL_EDGE = 40;
+    const AUTOSCROLL_SPEED = 6;
+    const tickAutoScroll = () => {
+      const container = scrollContainerRef.current;
+      if (!container || dragInfoRef.current === null) {
+        autoScrollRaf = null;
+        return;
+      }
+      const rect = container.getBoundingClientRect();
+      let delta = 0;
+      if (lastClientY < rect.top + AUTOSCROLL_EDGE) {
+        delta = -AUTOSCROLL_SPEED;
+      } else if (lastClientY > rect.bottom - AUTOSCROLL_EDGE) {
+        delta = AUTOSCROLL_SPEED;
+      }
+      if (delta !== 0) {
+        container.scrollTop += delta;
+        // スクロール後、指の位置で再度 toIndex を再計算（行が動いて hover index が変わるため）
+        const drag = dragInfoRef.current;
+        const next = computeToIndex(lastClientY, drag.fromIndex);
+        if (next !== drag.toIndex) {
+          dragInfoRef.current = { ...drag, toIndex: next };
+          setDragState((prev) => (prev === null ? prev : { ...prev, toIndex: next }));
+          applyShifts(drag.fromIndex, next);
+        }
+      }
+      autoScrollRaf = requestAnimationFrame(tickAutoScroll);
+    };
+
+    const onMoveWithAutoScroll = (e: PointerEvent) => {
+      lastClientY = e.clientY;
+      onMove(e);
+      // 自動スクロールループ起動（多重起動しない）
+      if (autoScrollRaf === null) {
+        autoScrollRaf = requestAnimationFrame(tickAutoScroll);
+      }
+    };
+
+    document.addEventListener("pointermove", onMoveWithAutoScroll, { passive: false });
+    document.addEventListener("touchmove", onTouchMove, { passive: false });
     document.addEventListener("pointerup", onUp);
     document.addEventListener("pointercancel", onUp);
     document.addEventListener("keydown", onKey);
     return () => {
-      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointermove", onMoveWithAutoScroll);
+      document.removeEventListener("touchmove", onTouchMove);
       document.removeEventListener("pointerup", onUp);
       document.removeEventListener("pointercancel", onUp);
       document.removeEventListener("keydown", onKey);
+      if (autoScrollRaf !== null) cancelAnimationFrame(autoScrollRaf);
     };
   }, [dragState?.id]);
 
@@ -259,6 +308,7 @@ export function StockList({ api }: Props) {
       cancelLongPress();
       const startId = item.id;
       const startIndex = idx;
+      const startPid = e.pointerId;
       longPressTimerRef.current = setTimeout(() => {
         longPressTimerRef.current = null;
         tapFeedback();
@@ -266,6 +316,22 @@ export function StockList({ api }: Props) {
         dragInfoRef.current = { id: startId, fromIndex: startIndex, toIndex: startIndex };
         setDragState({ id: startId, fromIndex: startIndex, toIndex: startIndex });
       }, LONG_PRESS_MS);
+
+      // 長押し成立前に領域外で pointerup/cancel された場合でもタイマーを確実に cancel する。
+      // 名前領域の React ハンドラは領域外リリースに反応しないため、document level で一度だけ仕掛ける。
+      // 長押し成立後の pointerup/cancel は別 useEffect 側の document listener が処理する。
+      const cancelOnExternalUp = (ev: PointerEvent) => {
+        if (ev.pointerId !== startPid) return;
+        document.removeEventListener("pointerup", cancelOnExternalUp);
+        document.removeEventListener("pointercancel", cancelOnExternalUp);
+        cancelLongPress();
+        // 既に長押し成立済みなら dragState 用の onUp に任せる（activePointerIdRef は維持）
+        if (dragInfoRef.current === null) {
+          activePointerIdRef.current = null;
+        }
+      };
+      document.addEventListener("pointerup", cancelOnExternalUp);
+      document.addEventListener("pointercancel", cancelOnExternalUp);
     },
     [editingId, cancelLongPress],
   );
@@ -309,9 +375,7 @@ export function StockList({ api }: Props) {
         <span className="text-neutral-400">{expanded ? "▾" : "▸"}</span>
       </button>
       {expanded && (
-        <div
-          className={`px-3 pb-3 max-h-48 ${dragState === null ? "overflow-y-auto" : "overflow-hidden"}`}
-        >
+        <div ref={scrollContainerRef} className="px-3 pb-3 max-h-48 overflow-y-auto">
           {api.data.stock.length === 0 && (
             <div className="flex flex-col items-center py-3 text-neutral-400">
               <img src={emptyStockImg} alt="" aria-hidden="true" className="w-20 h-20 opacity-90" />
@@ -341,6 +405,9 @@ export function StockList({ api }: Props) {
                 onPointerDown={(e) => handleRowPointerDown(item, idx, e)}
                 onPointerUp={(e) => handleRowPointerUp(item, e)}
                 onPointerCancel={(e) => handleRowPointerCancel(item, e)}
+                onKeyboardActivate={() => {
+                  if (editingId === null) setEditingId(item.id);
+                }}
               />
             ))}
           </ul>
@@ -417,6 +484,8 @@ type StockRowProps = {
   onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => void;
   onPointerUp: (e: React.PointerEvent<HTMLDivElement>) => void;
   onPointerCancel: (e: React.PointerEvent<HTMLDivElement>) => void;
+  /** キーボード（Enter/Space）で編集モード進入 */
+  onKeyboardActivate: () => void;
 };
 
 /**
@@ -442,6 +511,7 @@ function StockRow({
   onPointerDown,
   onPointerUp,
   onPointerCancel,
+  onKeyboardActivate,
 }: StockRowProps) {
   // ドラッグ中の行は scale + shadow で「持ち上がった」感を出す。
   // transform は親 StockList の document handler が translateY 用に DOM 直接操作するため、
@@ -517,6 +587,7 @@ function StockRow({
           onPointerDown={onPointerDown}
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerCancel}
+          onKeyboardActivate={onKeyboardActivate}
         />
       )}
     </li>
@@ -581,6 +652,8 @@ type StockNameDisplayProps = {
   onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => void;
   onPointerUp: (e: React.PointerEvent<HTMLDivElement>) => void;
   onPointerCancel: (e: React.PointerEvent<HTMLDivElement>) => void;
+  /** キーボード操作（Enter / Space）で編集モードに入るためのコールバック */
+  onKeyboardActivate: () => void;
 };
 
 /** 名前表示部。useAutoShrink で 1 行収納。pointer イベントは親（StockList）に流す */
@@ -590,6 +663,7 @@ function StockNameDisplay({
   onPointerDown,
   onPointerUp,
   onPointerCancel,
+  onKeyboardActivate,
 }: StockNameDisplayProps) {
   const BASE_PX = 14;
   const { containerRef, measureRef, fontPx } = useAutoShrink({
@@ -602,14 +676,22 @@ function StockNameDisplay({
     <div
       ref={containerRef}
       className="flex-1 min-w-0 self-center relative overflow-hidden pl-1 flex items-center gap-1 cursor-text"
-      // touch-action: none は touchstart 時点で評価される。長押し中（500ms）に
-      // 指が少しでも動くと pointercancel でドラッグが死ぬのを防ぐため、常時適用する。
-      // 名前領域でだけスクロール不可になるが、ストック容器のスクロールは
-      // ボタン領域や行間で発火できるので運用上問題ない。
-      style={{ touchAction: "none" }}
+      // touch-action: pan-y で縦スクロールは許可。長押し成立後は document level の
+      // touchmove preventDefault でブラウザのスクロールを抑止する。
+      // 「名前領域で長押し→ドラッグ」と「ストック全体の縦スクロール」を両立させる妥協。
+      style={{ touchAction: "pan-y" }}
       onPointerDown={onPointerDown}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerCancel}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onKeyboardActivate();
+        }
+      }}
+      // biome-ignore lint/a11y/useSemanticElements: pointer イベントを内側のテキストエリアで受けるため div + role="button" を採用
+      role="button"
+      tabIndex={0}
       aria-label={`${item.text}（タップで編集、長押しで並び替え）`}
     >
       <span
