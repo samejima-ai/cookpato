@@ -39,11 +39,18 @@ export function SearchResults({ hits, query, onPick }: Props) {
                     </span>
                   )}
                 </div>
-                <div className="text-sm text-neutral-800 whitespace-pre-wrap">
+                <div className="text-sm text-neutral-800">
                   {hit.lines
-                    .map((l) => l.text)
-                    .filter((t) => t !== "")
-                    .join("\n")}
+                    .filter((l) => l.text !== "")
+                    .map((l, i) => (
+                      <div
+                        // biome-ignore lint/suspicious/noArrayIndexKey: 検索結果の品リストは並び替え不可で index が安定キー
+                        key={i}
+                        className="whitespace-nowrap overflow-hidden text-ellipsis"
+                      >
+                        {l.text}
+                      </div>
+                    ))}
                 </div>
               </button>
             </li>
