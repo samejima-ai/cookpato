@@ -42,15 +42,7 @@ export function StockList({ api }: Props) {
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // dragState を document handler 内から最新値で参照するための ref。
   // setState は非同期で document handler 登録より遅れる可能性があるため、ref と二重で保持する。
-  // startY は長押し成立時の指の Y。pointermove での指追従計算に使う。
-  const dragInfoRef = useRef<{
-    id: string;
-    fromIndex: number;
-    toIndex: number;
-    startY: number;
-  } | null>(null);
-  // pointerdown 時の clientY を 500ms 経過後に dragInfoRef.startY としてコピーする
-  const pendingStartYRef = useRef<number>(0);
+  const dragInfoRef = useRef<{ id: string; fromIndex: number; toIndex: number } | null>(null);
   // ドラッグ中の pointerId（複数指タッチで誤動作させないため）
   const activePointerIdRef = useRef<number | null>(null);
   // 並び替え時のアニメーション用に、前回 paint 時の各行 top を保持する
@@ -163,15 +155,19 @@ export function StockList({ api }: Props) {
     }
 
     /**
-     * ドラッグ中の他の行に挿入位置のシフトを適用する。
-     * ドラッグ行（fromIndex）の transform は updateDraggedRowFollow が指追従で別管理。
+     * ドラッグ中の各行に「もし今リリースしたら」のレイアウトを transform で適用する。
+     * ドラッグ行も含めて全行 snap：toIndex 位置にドラッグ行が、間の行は隙間を空ける向きにシフト。
+     * これで「離した時の位置」をリアルタイムでプレビューできる。
      */
     const applyShifts = (fromIndex: number, toIndex: number) => {
       api.data.stock.forEach((item, i) => {
         const li = liRefs.current.get(item.id);
         if (!li) return;
-        if (i === fromIndex) return; // ドラッグ行は updateDraggedRowFollow が更新
-        if (fromIndex < toIndex && i > fromIndex && i <= toIndex) {
+        if (i === fromIndex) {
+          // ドラッグ行：toIndex の位置へ snap（行ピッチ × インデックス差）
+          const dy = (toIndex - fromIndex) * rowPitch;
+          li.style.transform = dy === 0 ? "" : `translateY(${dy}px)`;
+        } else if (fromIndex < toIndex && i > fromIndex && i <= toIndex) {
           // 下向きドラッグ：間にある行を上に詰める（ドラッグ行が抜けた隙間を埋める）
           li.style.transform = `translateY(${-rowPitch}px)`;
         } else if (fromIndex > toIndex && i < fromIndex && i >= toIndex) {
@@ -183,17 +179,9 @@ export function StockList({ api }: Props) {
       });
     };
 
-    /** ドラッグ行を指の Y に追従させる（startY からの差分を transform に反映） */
-    const updateDraggedRowFollow = (id: string, currentY: number, startY: number) => {
-      const li = liRefs.current.get(id);
-      if (!li) return;
-      const dy = currentY - startY;
-      li.style.transform = `translateY(${dy}px)`;
-    };
-
-    // 各 li の transition：ドラッグ行は指追従のため transition なし、他は 150ms ease-out
-    liRefs.current.forEach((li, id) => {
-      li.style.transition = id === dragState.id ? "none" : "transform 150ms ease-out";
+    // 全 li に同一の transition を適用（snap 時に滑らかに移動）
+    liRefs.current.forEach((li) => {
+      li.style.transition = "transform 150ms ease-out";
     });
     applyShifts(dragState.fromIndex, dragState.toIndex);
 
@@ -203,9 +191,6 @@ export function StockList({ api }: Props) {
       e.preventDefault();
       const drag = dragInfoRef.current;
       if (drag === null) return;
-      // ドラッグ行を指追従
-      updateDraggedRowFollow(drag.id, e.clientY, drag.startY);
-      // toIndex の変化があれば他の行のシフトを更新
       const next = computeToIndex(e.clientY, drag.fromIndex);
       if (next !== drag.toIndex) {
         dragInfoRef.current = { ...drag, toIndex: next };
@@ -271,7 +256,6 @@ export function StockList({ api }: Props) {
       if (e.pointerType === "mouse" && e.button !== 0) return;
       // setPointerCapture は呼ばない（呼ぶと document に pointermove が届かなくなる経路がある）
       activePointerIdRef.current = e.pointerId;
-      pendingStartYRef.current = e.clientY;
       cancelLongPress();
       const startId = item.id;
       const startIndex = idx;
@@ -279,12 +263,7 @@ export function StockList({ api }: Props) {
         longPressTimerRef.current = null;
         tapFeedback();
         // ref を先に書いてから state 更新（document handler が次フレームで参照する）
-        dragInfoRef.current = {
-          id: startId,
-          fromIndex: startIndex,
-          toIndex: startIndex,
-          startY: pendingStartYRef.current,
-        };
+        dragInfoRef.current = { id: startId, fromIndex: startIndex, toIndex: startIndex };
         setDragState({ id: startId, fromIndex: startIndex, toIndex: startIndex });
       }, LONG_PRESS_MS);
     },
