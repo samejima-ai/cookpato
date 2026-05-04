@@ -133,9 +133,7 @@ export function DayRow({
         <div className={`text-sm font-medium ${labelColor}`}>
           <span>{formatDayLabel(dateKey)}</span>
         </div>
-        {holidayName && (
-          <div className="text-xs text-red-500 mt-0.5 leading-tight">{holidayName}</div>
-        )}
+        {holidayName && <HolidayLabel name={holidayName} />}
         {isToday && <div className="text-xs text-yellow-700 mt-0.5">今日</div>}
         {/* iOS Safari の IME 多重入力バグ対策として、key={dateKey} で日付ごとに input を再マウントし
             uncontrolled パターン（defaultValue）を採る。SPEC.md「ちょいメモ」参照。 */}
@@ -525,6 +523,39 @@ function caretLine(value: string, caret: number): string {
   const nextNl = value.indexOf("\n", caret);
   const end = nextNl === -1 ? value.length : nextNl;
   return value.slice(start, end);
+}
+
+/**
+ * 祝日名のラベル。日付列幅（96px）に収まらない長さ（例：「体育の日（スポーツの日）」
+ * 「勤労感謝の日 振替休日」）でも 1 行表示を維持するため、`useAutoShrink` で
+ * フォントサイズを動的縮小する（CLAUDE.md「文字列は1行表示」原則準拠）。
+ * ResizeObserver で容器幅変化にも追従するため、画面サイズ変化（端末違い・横画面）でも崩れない。
+ */
+function HolidayLabel({ name }: { name: string }) {
+  const BASE_PX = 12; // text-xs 相当
+  const { containerRef, measureRef, fontPx } = useAutoShrink({
+    value: name,
+    basePx: BASE_PX,
+    minPx: 8,
+  });
+  return (
+    <div ref={containerRef} className="relative w-full overflow-hidden mt-0.5">
+      <span
+        ref={measureRef}
+        aria-hidden="true"
+        className="invisible absolute top-0 left-0 whitespace-nowrap"
+        style={{ fontSize: `${BASE_PX}px` }}
+      >
+        {name}
+      </span>
+      <div
+        style={{ fontSize: `${fontPx}px` }}
+        className="text-red-500 leading-tight whitespace-nowrap overflow-hidden"
+      >
+        {name}
+      </div>
+    </div>
+  );
 }
 
 type MemoFieldProps = {
