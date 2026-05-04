@@ -21,3 +21,6 @@
 
 ## 開発環境
 → CLAUDE.md, .claude/skills/, sensors/
+
+## 進行中サイクル（L0→L1 引き継ぎ）
+→ INSTRUCTIONS.md（ストック行 1 行収納・名前編集・メモ入力バグ修正・長押しドラッグ並び替え）
