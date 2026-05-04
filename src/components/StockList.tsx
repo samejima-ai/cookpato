@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import emptyStockImg from "../assets/empty-stock.png";
 import favoriteImg from "../assets/favorite.png";
 import type { AppDataApi } from "../hooks/useAppData";
@@ -45,6 +45,8 @@ export function StockList({ api }: Props) {
   const dragInfoRef = useRef<{ id: string; fromIndex: number; toIndex: number } | null>(null);
   // ドラッグ中の pointerId（複数指タッチで誤動作させないため）
   const activePointerIdRef = useRef<number | null>(null);
+  // 並び替え時のアニメーション用に、前回 paint 時の各行 top を保持する
+  const prevRectsRef = useRef<Map<string, number>>(new Map());
 
   function handleAdd() {
     const name = (draftNameRef.current?.value ?? "").trim();
@@ -65,6 +67,35 @@ export function StockList({ api }: Props) {
     },
     [],
   );
+
+  // FLIP アニメーション：並び替え（および追加・削除）に伴う行の移動を視覚化する。
+  // 1) 前回 paint 時の top を `prevRectsRef` に保持
+  // 2) 再レンダ後（useLayoutEffect）に新しい top を取得し差分 dy を算出
+  // 3) translateY(dy) で「元の位置」に戻したように見せ、次フレームで 0 へ transition
+  // CLAUDE.md「アニメーションは 100-200ms 以内」に従い 150ms。
+  // 依存は `api.data.stock`（配列の参照変化＝並び替え・追加・削除のいずれかで再実行）。
+  // biome-ignore lint/correctness/useExhaustiveDependencies: stock 変化が再実行の意図的トリガー。中身は ref から読むため body には現れない
+  useLayoutEffect(() => {
+    const prev = prevRectsRef.current;
+    const next = new Map<string, number>();
+    liRefs.current.forEach((li, id) => {
+      const top = li.getBoundingClientRect().top;
+      next.set(id, top);
+      const oldTop = prev.get(id);
+      if (oldTop === undefined) return;
+      const dy = oldTop - top;
+      if (dy === 0 || Math.abs(dy) > 1000) return;
+      // First → Last の差分を一旦適用して、次フレームで解除する
+      li.style.transition = "none";
+      li.style.transform = `translateY(${dy}px)`;
+      // 次フレームで transition 適用 → transform 解除で滑らかに移動
+      requestAnimationFrame(() => {
+        li.style.transition = "transform 150ms ease-out";
+        li.style.transform = "";
+      });
+    });
+    prevRectsRef.current = next;
+  }, [api.data.stock]);
 
   const cancelLongPress = useCallback(() => {
     if (longPressTimerRef.current) {
