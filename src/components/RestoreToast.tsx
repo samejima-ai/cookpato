@@ -27,7 +27,7 @@ export function RestoreToast({ onDismiss }: Props) {
         type="button"
         onClick={onDismiss}
         aria-label="トーストを閉じる"
-        className="w-9 h-9 flex items-center justify-center text-emerald-700 active:text-emerald-900 shrink-0"
+        className="w-11 h-11 flex items-center justify-center text-emerald-700 active:text-emerald-900 shrink-0"
       >
         ×
       </button>

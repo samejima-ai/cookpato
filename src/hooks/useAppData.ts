@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { startOfWeekKey, todayKey } from "../lib/date";
 import { generateId } from "../lib/id";
 import { favoriteKey } from "../lib/normalize";
-import { loadDataWithRecovery, maybeUpdateSnapshot, saveData } from "../lib/storage";
+import { loadDataWithRecovery, maybeUpdateSnapshot, saveData, saveSnapshot } from "../lib/storage";
 import { isWeekComplete } from "../lib/week";
 import type { AppData, DateKey, DayMeals, MealLine } from "../types";
 
@@ -129,6 +129,10 @@ export function useAppData(): AppDataApi {
   }, []);
 
   const restoreData = useCallback((data: AppData) => {
+    // 起動時 maybeUpdateSnapshot で「今日」の日付で古いプライマリがスナップショット保存されている。
+    // 復元後はその古いスナップショットを当日の復元データで強制上書きしないと、
+    // 同日中にプライマリが消えた場合 A 層復元が古い内容に巻き戻ってしまう。
+    saveSnapshot(todayKey(), data);
     setState((prev) => ({
       ...prev,
       data,
