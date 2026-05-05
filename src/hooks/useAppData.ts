@@ -3,15 +3,21 @@
  * 1箇所に集約することで副作用をカプセル化する。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { startOfWeekKey } from "../lib/date";
+import { startOfWeekKey, todayKey } from "../lib/date";
 import { generateId } from "../lib/id";
 import { favoriteKey } from "../lib/normalize";
-import { loadData, saveData } from "../lib/storage";
+import { loadDataWithRecovery, maybeUpdateSnapshot, saveData, saveSnapshot } from "../lib/storage";
 import { isWeekComplete } from "../lib/week";
 import type { AppData, DateKey, DayMeals, MealLine } from "../types";
 
 export type AppDataApi = {
   data: AppData;
+  /** A 層スナップショットからの自動復元が今セッションで発火したか（トースト表示用） */
+  restoredFromBackup: boolean;
+  /** 復元トーストを閉じる／自動消滅時に呼ぶ */
+  clearRestoredFlag: () => void;
+  /** インポート（バックアップから復元）：AppData 全体を差し替える */
+  restoreData: (data: AppData) => void;
   /** 1日分の献立テキストを更新（即時保存） */
   setMealsText: (date: DateKey, text: string) => void;
   /** 1日分のちょいメモを更新（即時保存）。空文字は未設定扱い */
@@ -76,7 +82,11 @@ function linesAreEmpty(lines: DayMeals["lines"]): boolean {
  * 同一 tick 内で setMealsText が複数回呼ばれても直前の結果を連鎖して見られるようにする
  * （関数更新で必ず prev を経由するため）。
  */
-type State = { data: AppData; justCompletedSunday: DateKey | null };
+type State = {
+  data: AppData;
+  justCompletedSunday: DateKey | null;
+  restoredFromBackup: boolean;
+};
 
 /** ストックを fromIndex から toIndex に並び替える。境界外なら変化なし */
 function reorderStockArray(prev: State, fromIndex: number, toIndex: number): State {
@@ -92,10 +102,17 @@ function reorderStockArray(prev: State, fromIndex: number, toIndex: number): Sta
 }
 
 export function useAppData(): AppDataApi {
-  const [state, setState] = useState<State>(() => ({
-    data: loadData(),
-    justCompletedSunday: null,
-  }));
+  const [state, setState] = useState<State>(() => {
+    const today = todayKey();
+    const { data, restored } = loadDataWithRecovery();
+    // 起動時 1 日 1 回相当：プライマリ（または復元結果）をスナップショットへコピー
+    maybeUpdateSnapshot(today, data);
+    return {
+      data,
+      justCompletedSunday: null,
+      restoredFromBackup: restored,
+    };
+  });
 
   // 編集セッション開始時の meals スナップショット参照。
   // beginMealsEdit で保存し、commitMealsEdit で「未達成 → 達成」遷移判定に使う。
@@ -106,6 +123,22 @@ export function useAppData(): AppDataApi {
   useEffect(() => {
     saveData(state.data);
   }, [state.data]);
+
+  const clearRestoredFlag = useCallback(() => {
+    setState((prev) => (prev.restoredFromBackup ? { ...prev, restoredFromBackup: false } : prev));
+  }, []);
+
+  const restoreData = useCallback((data: AppData) => {
+    // 起動時 maybeUpdateSnapshot で「今日」の日付で古いプライマリがスナップショット保存されている。
+    // 復元後はその古いスナップショットを当日の復元データで強制上書きしないと、
+    // 同日中にプライマリが消えた場合 A 層復元が古い内容に巻き戻ってしまう。
+    saveSnapshot(todayKey(), data);
+    setState((prev) => ({
+      ...prev,
+      data,
+      justCompletedSunday: null,
+    }));
+  }, []);
 
   const setMealsText = useCallback((date: DateKey, text: string) => {
     setState((prev) => {
@@ -179,6 +212,7 @@ export function useAppData(): AppDataApi {
       const nowComplete = isWeekComplete(prev.data.meals, date);
       if (wasComplete || !nowComplete) return prev;
       return {
+        ...prev,
         data: {
           ...prev.data,
           completedWeeks: [...prev.data.completedWeeks, sunday],
@@ -335,6 +369,9 @@ export function useAppData(): AppDataApi {
 
   return {
     data: state.data,
+    restoredFromBackup: state.restoredFromBackup,
+    clearRestoredFlag,
+    restoreData,
     setMealsText,
     setMemo,
     toggleLine,

@@ -1,9 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
+import { BackupBanner } from "./components/BackupBanner";
+import { BackupRestore } from "./components/BackupRestore";
 import { Calendar } from "./components/Calendar";
+import { RestoreToast } from "./components/RestoreToast";
 import { SearchBar } from "./components/SearchBar";
 import { SearchResults } from "./components/SearchResults";
 import { StockList } from "./components/StockList";
 import { useAppData } from "./hooks/useAppData";
+import { useBackup } from "./hooks/useBackup";
 import { useSearch } from "./hooks/useSearch";
 import type { DateKey } from "./types";
 
@@ -16,6 +20,7 @@ const ACTIVE_DEBOUNCE_MS = 150;
 
 export default function App() {
   const api = useAppData();
+  const backup = useBackup(api);
   const [query, setQuery] = useState("");
   const [scrollTarget, setScrollTarget] = useState<DateKey | undefined>(undefined);
   const [activeQuery, setActiveQuery] = useState("");
@@ -63,6 +68,10 @@ export default function App() {
   return (
     <div className="flex flex-col h-full max-w-xl mx-auto">
       <header className="relative shrink-0 safe-top">
+        {api.restoredFromBackup && <RestoreToast onDismiss={api.clearRestoredFlag} />}
+        {backup.showBanner && (
+          <BackupBanner onSave={backup.exportNow} onDismiss={backup.dismissBanner} />
+        )}
         <SearchBar
           value={query}
           onChange={setQuery}
@@ -74,7 +83,10 @@ export default function App() {
       </header>
       <main className="flex-1 flex flex-col min-h-0">
         <Calendar api={api} scrollTarget={scrollTarget} onActiveQueryChange={handleActiveChange} />
-        <StockList api={api} />
+        <StockList
+          api={api}
+          restoreSlot={<BackupRestore importFromText={backup.importFromText} />}
+        />
       </main>
     </div>
   );

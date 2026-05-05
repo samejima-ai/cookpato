@@ -27,6 +27,9 @@ function makeApi(overrides?: Partial<AppDataApi>): AppDataApi {
   };
   return {
     data,
+    restoredFromBackup: false,
+    clearRestoredFlag: vi.fn(),
+    restoreData: vi.fn(),
     setMealsText: vi.fn(),
     setMemo: vi.fn(),
     toggleLine: vi.fn(),

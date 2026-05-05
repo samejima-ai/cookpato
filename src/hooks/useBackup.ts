@@ -1,0 +1,80 @@
+/**
+ * バックアップ B 層（週 1 ファイル書き出し + インポート復元）の状態管理 hook。
+ *
+ * - 起動時に lastExport を localStorage から読み、7 日経過でバナー表示
+ * - バナー閉じはセッション中だけ（次回起動時に条件を満たせば再表示）
+ * - exportNow: ダウンロード発火 + lastExport 更新（OS ダイアログ可否は検知できないので
+ *   クリック発火 = 成功扱い）
+ * - importFromText: JSON テキストを検証して AppData として上書き復元
+ */
+import { useCallback, useMemo, useState } from "react";
+import {
+  getBackupFilename,
+  parseBackup,
+  serializeBackup,
+  shouldShowExportBanner,
+  triggerDownload,
+} from "../lib/backup";
+import { todayKey } from "../lib/date";
+import { loadLastExport, saveLastExport } from "../lib/storage";
+import type { AppData, DateKey } from "../types";
+import type { AppDataApi } from "./useAppData";
+
+export type ImportResult = { ok: true } | { ok: false; reason: string };
+
+export type UseBackupApi = {
+  /** B 層バナーを表示すべきか（最終書き出しから 7 日経過 + セッション中未 dismiss） */
+  showBanner: boolean;
+  /** 最終ファイル書き出し日（DateKey、未経験は null） */
+  lastExport: DateKey | null;
+  /** バナータップ：ファイル書き出しを発火し lastExport を更新 */
+  exportNow: () => void;
+  /** バナー閉じる（セッション中のみ。再起動で復活） */
+  dismissBanner: () => void;
+  /** インポート復元：AppData として検証 → 成功時に api.restoreData を呼ぶ */
+  importFromText: (text: string) => ImportResult;
+};
+
+export function useBackup(api: AppDataApi): UseBackupApi {
+  const [lastExport, setLastExport] = useState<DateKey | null>(() => loadLastExport());
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+
+  const showBanner = useMemo(() => {
+    if (bannerDismissed) return false;
+    return shouldShowExportBanner(lastExport, todayKey());
+  }, [bannerDismissed, lastExport]);
+
+  const exportNow = useCallback(() => {
+    const now = new Date();
+    const filename = getBackupFilename(now);
+    const content = serializeBackup(api.data);
+    triggerDownload(filename, content);
+    const today = todayKey();
+    saveLastExport(today);
+    setLastExport(today);
+  }, [api.data]);
+
+  const dismissBanner = useCallback(() => {
+    setBannerDismissed(true);
+  }, []);
+
+  const importFromText = useCallback(
+    (text: string): ImportResult => {
+      const data: AppData | null = parseBackup(text);
+      if (!data) {
+        return { ok: false, reason: "ファイル形式が不正です" };
+      }
+      api.restoreData(data);
+      return { ok: true };
+    },
+    [api],
+  );
+
+  return {
+    showBanner,
+    lastExport,
+    exportNow,
+    dismissBanner,
+    importFromText,
+  };
+}
