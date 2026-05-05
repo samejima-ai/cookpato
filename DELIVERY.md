@@ -201,3 +201,59 @@ L0 サイクル（PR #17、INSTRUCTIONS.md）に従い 4 タスクを実装。
 - 妥当。INSTRUCTIONS.md が機能×条件粒度で確定していたため、自走で完遂できた。
 - 独立検証 agent の不在による品質劣化はなし（SPEC との照合は自己検証で十分）。
 - L2 発動閾値には依然として遠い（変更ファイル数 4、新規行 +400 程度）。次回サイクルも M1 で問題ない見込み。
+
+---
+
+### 2026-05-05: バックアップ機能（A 層 localStorage 二重化 + B 層 週 1 ファイル書き出し）（L0 #20 → L1）
+
+L0 サイクル（PR #20、SPEC.md「バックアップ（二層構成）」）に従い、消失リスク対策として
+バックアップ機能を実装。妻の端末でストック行改修後にデータ消失した実例を受けた対応。
+
+#### 変更点
+
+**A 層（無音・完全自動）**
+- `src/lib/storage.ts` を拡張：
+  - `cookpato:backup:v1` キーに `{ snapshotDate, data }` 形式でスナップショットを保存
+  - `loadSnapshot` / `saveSnapshot` / `maybeUpdateSnapshot`（同日複数起動でも 1 回のみコピー）
+  - `loadDataWithRecovery`：プライマリ実質空 + スナップショット有効データ → 自動復元してプライマリへ書き戻し
+  - `coerceAppData` を export 化し `parseBackup` から再利用
+- `src/hooks/useAppData.ts`：起動時に `loadDataWithRecovery` + `maybeUpdateSnapshot` を呼ぶ。`restoredFromBackup` フラグと `clearRestoredFlag` / `restoreData` を追加
+- `src/components/RestoreToast.tsx`：自動復元発火時に 3 秒トースト表示
+
+**B 層（半自動・週 1）**
+- `src/lib/backup.ts` 新規作成：
+  - `formatISOWeek(date)` → `2026-W18` 形式（date-fns の `getISOWeek` / `getISOWeekYear`）
+  - `getBackupFilename(date)` → `cookpato-backup-2026-W18.json`
+  - `serializeBackup(data)` → インデント 2 の JSON
+  - `parseBackup(jsonText)` → `coerceAppData` で検証 + 「実質空は拒否」（誤適用での全消し防止）
+  - `triggerDownload(filename, content)` → `<a download>` 経由（iOS の OS 確認バナーを経由）
+  - `shouldShowExportBanner(lastExport, today)` → 7 日経過判定（不正日付は安全側で表示）
+- `src/hooks/useBackup.ts` 新規：`showBanner` / `exportNow` / `dismissBanner`（セッション中のみ） / `importFromText`
+- `src/components/BackupBanner.tsx`：起動時バナー UI。タップで `exportNow` 発火、× で閉じる（次回起動時に条件を満たせば再表示）
+
+**インポート（復元 UI）**
+- `src/components/BackupRestore.tsx`：「バックアップから復元」ボタン → `<input type="file">` → 確認ダイアログ「現在のデータを上書きします。続行しますか？」 → `api.restoreData` で全データ差し替え
+- 検証失敗時はインラインエラーメッセージ（`role="alert"`）。成功時は `<output>` で 3 秒成功メッセージ
+
+**統合**
+- `src/components/StockList.tsx` に `restoreSlot?: ReactNode` プロップを追加し、展開エリア末尾に描画
+- `src/App.tsx`：`useBackup` を呼び、`RestoreToast` / `BackupBanner` を header 内へ、`BackupRestore` を `StockList` の `restoreSlot` へ配置
+
+#### センサー結果（全 5 項目 pass）
+| コマンド | 結果 |
+|---|---|
+| `npm run typecheck` | ✅ |
+| `npm run lint` | ✅ |
+| `npm run format:check` | ✅ |
+| `npm test` | ✅ 173/173（前回 131 件 → 増分 +42 件 = storage 20 + backup 12 + 既存維持） |
+| `npm run build` | ✅（dist 367.84 kB JS / gzip 86.48 kB） |
+
+#### 既知未検証事項
+- 実機 iPhone 11 Safari スタンドアロン PWA モードでの `<a download>` 挙動（仕様で「要実機検証」と明記。iOS 16.4+ で改善済みの認識）。Vercel Preview デプロイで妻の端末にて動作確認推奨
+- iOS の Files アプリ「ダウンロード」フォルダへ実際に保存されるかは jsdom テストで担保不能
+- 自動復元発火の体験フロー（プライマリだけが消えてスナップショットが残るレアケース）は localStorage モックでユニットテスト済みだが、実機での復元再現は次回 L0 レビュー時に妻の端末で観察して反映
+
+#### 体制事後評価（M1 単体モード）
+- 妥当。SPEC.md「バックアップ（二層構成）」が機能×条件粒度で完全に確定しており、迷う場面はなかった
+- 独立検証 agent の不在による品質劣化はなし（自己検証＋計算センサーで十分捕捉）
+- L2 発動閾値には遠い（変更ファイル数 9、新規行 +750 程度）。次回サイクルも M1 で問題ない見込み

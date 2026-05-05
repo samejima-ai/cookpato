@@ -10,11 +10,13 @@ import type { StockItem } from "../types";
 
 type Props = {
   api: AppDataApi;
+  /** 折りたたみ展開時に末尾へ描画する任意スロット（バックアップ復元ボタン等） */
+  restoreSlot?: React.ReactNode;
 };
 
 const LONG_PRESS_MS = 500;
 
-export function StockList({ api }: Props) {
+export function StockList({ api, restoreSlot }: Props) {
   const [expanded, setExpanded] = useState(true);
   // 追加 input の妥当性のみ state で持ち、値は uncontrolled な input から ref で読む。
   // controlled (`value=`) にすると iOS Safari の IME 中に親 state 反映がスキップされた瞬間
@@ -463,6 +465,7 @@ export function StockList({ api }: Props) {
               追加
             </button>
           </div>
+          {restoreSlot}
         </div>
       )}
     </div>
