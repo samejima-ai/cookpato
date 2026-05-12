@@ -10,6 +10,18 @@ function empty1(): DayMeals {
   return { lines: [{ text: "", done: false }] };
 }
 
+// 起動時自動生成された 4 空行の日（cheer.ts の isEmptyDay 拡張定義）
+function autoEmpty4(): DayMeals {
+  return {
+    lines: [
+      { text: "", done: false },
+      { text: "", done: false },
+      { text: "", done: false },
+      { text: "", done: false },
+    ],
+  };
+}
+
 // 2026-04-12 は日曜、2026-04-18 は土曜
 const SUN = "2026-04-12";
 const MON = "2026-04-13";
@@ -69,6 +81,32 @@ describe("isWeekComplete", () => {
       [THU]: filled(),
       [FRI]: filled(),
       [SAT]: filled(),
+    };
+    expect(isWeekComplete(meals, SUN)).toBe(false);
+  });
+
+  it("自動生成された 4 空行の日も埋まってない扱い（空日定義拡張）", () => {
+    const meals: Record<string, DayMeals> = {
+      [SUN]: filled(),
+      [MON]: filled(),
+      [TUE]: filled(),
+      [WED]: autoEmpty4(),
+      [THU]: filled(),
+      [FRI]: filled(),
+      [SAT]: filled(),
+    };
+    expect(isWeekComplete(meals, SUN)).toBe(false);
+  });
+
+  it("週全日が自動生成 4 空行なら未達成（誤って達成判定されない）", () => {
+    const meals: Record<string, DayMeals> = {
+      [SUN]: autoEmpty4(),
+      [MON]: autoEmpty4(),
+      [TUE]: autoEmpty4(),
+      [WED]: autoEmpty4(),
+      [THU]: autoEmpty4(),
+      [FRI]: autoEmpty4(),
+      [SAT]: autoEmpty4(),
     };
     expect(isWeekComplete(meals, SUN)).toBe(false);
   });

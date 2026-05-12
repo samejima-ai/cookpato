@@ -2,15 +2,18 @@
  * 週単位の判定ロジック。週は日曜始まり（日〜土の7日）。
  */
 import type { DateKey, DayMeals } from "../types";
+import { isEmptyDay } from "./cheer";
 import { addDaysKey, startOfWeekKey } from "./date";
 
-/** 献立の入った日か（空・欠落は false） */
+/**
+ * 献立の入った日か（空・欠落は false）。
+ * 「空」の定義は cheer.ts の `isEmptyDay` と共有する：
+ * - DayMeals 自体が undefined
+ * - lines が 0 個
+ * - lines がすべて text==='' （起動時自動生成された 4 空行を含む）
+ */
 function isFilled(day: DayMeals | undefined): boolean {
-  if (!day) return false;
-  const { lines } = day;
-  if (lines.length === 0) return false;
-  if (lines.length === 1 && lines[0]?.text === "") return false;
-  return true;
+  return !isEmptyDay(day);
 }
 
 /**
