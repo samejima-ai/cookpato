@@ -3,6 +3,12 @@
 Layer 0（spec-architect）が開発モードを決定するためのスコアリングプロトコル。
 規模（S）・不確実性（U）・リスク（R）の3軸で評価する。
 
+> **S/U/R 用語対応**: `S = 規模 = Scale` / `U = 不確実性 = Uncertainty` / `R = リスク = Risk`。
+> 用語の正典宣言は `harness-verifier/glossary.yml` の `score_axes` キーを参照。
+> 同じ S/U/R 軸は本プロトコル（モード判定）以外でも使用される
+> （例: `history/DH-PHILOSOPHY-INSIGHTS.md` §4.4 / §10.5 の判断モーメント介入閾値、
+> `history/DIMENSIONS.md` §7.5 の hybrid 閾値）。射程・配点は文脈ごとに異なる。
+
 ---
 
 ## 判定原則
@@ -83,6 +89,11 @@ S/U/R と並ぶ第4軸として判定フローに組み込む。
 
 NFRスコア範囲：0〜15点
 
+### UX 3問プロトコルとの関係
+
+UX は独立軸として追加せず、NFR 軸内の補足として扱う。
+L0 対話ステップ 2.5（UX 3問プロトコル）で取得した Must 閾値・禁止挙動・参考類似サービスは、SPEC.md の UX制約セクションに格納され、N の A（可用性）・L（スケーラビリティ）スコアの補正情報として参照される。詳細は `../SKILL.md` ステップ 2.5 を参照。
+
 **デフォルト**: `REGIME.md` の NFR スコアセクションに記録がない、または対話で引き出せなかった場合は **N=0**。
 **オーバーライドルール 4 条件**（詳細は `nfr-scoring.md`）:
 
@@ -93,43 +104,101 @@ NFRスコア範囲：0〜15点
 
 ---
 
-## 軸5：Lifecycle軸（1→5運用対応）
+## 軸5：LC 軸（1→5運用対応）
 
 プロジェクトが新規か継続かを示す軸。`history/` の有無と経過日数で自動判定。
 S/U/R スコアには影響しないが、**振り返り儀式のレベル判定**と **L0 処理フロー分岐**に使う。
 
-| Lifecycle | 値 | 判定条件 | 履歴層の扱い |
+| LC | 値 | 判定条件 | 履歴層の扱い |
 |---|---|---|---|
-| L=0 | 新規 | `history/` なし | 新規作成のみ、儀式完全スキップ |
-| L=1 | 拡張 | `history/` あり、CHANGELOG.md 最終更新が30日以内 | INTENT/CHANGELOG 参照を必須化、儀式デフォルト レベル1 |
-| L=2 | 保守 | `history/` あり、CHANGELOG.md 最終更新が30日超 | 全履歴参照必須、儀式デフォルト レベル2以上 |
+| LC=0 | 新規 | `history/` なし | 新規作成のみ、儀式完全スキップ |
+| LC=1 | 拡張 | `history/` あり、CHANGELOG.md 最終更新が30日以内 | INTENT/CHANGELOG 参照を必須化、儀式デフォルト レベル1 |
+| LC=2 | 保守 | `history/` あり、CHANGELOG.md 最終更新が30日超 | 全履歴参照必須、儀式デフォルト レベル2以上 |
 
-### Lifecycle 判定ロジック
+### LC 判定ロジック
 
 ```
 1. history/ 存在確認
-   なし → L=0
+   なし → LC=0
 2. history/CHANGELOG.md 最終更新日確認
-   30日以内 → L=1
-   30日超 → L=2
+   30日以内 → LC=1
+   30日超 → LC=2
 ```
 
-Lifecycle 判定は AI が履歴層から自動抽出する。人間に問わない。
+LC 判定は AI が履歴層から自動抽出する。人間に問わない。
 
 ---
 
-## 儀式レベル判定（Lifecycle ≥ 1 で適用）
+## 儀式レベル判定（LC ≥ 1 で適用）
 
-振り返り儀式のレベル（0〜3）を Lifecycle と対話発話から決定する。
+振り返り儀式のレベル（0〜3）を LC と対話発話から決定する。
 
 | レベル | 条件 | 処理 |
 |---|---|---|
-| 0 | Lifecycle L=0、または前回ループから経過なし | 完全スキップ |
-| 1 | Lifecycle L=1、機能変更なしの対話 | SUMMARY.md のみ、1問確認 |
+| 0 | LC=0、または前回ループから経過なし | 完全スキップ |
+| 1 | LC=1、機能変更なしの対話 | SUMMARY.md のみ、1問確認 |
 | 2 | 機能追加・変更・廃止を含む対話 | SUMMARY + 関連 INTENT、2〜3問 |
-| 3 | Lifecycle L=2、90日超、規模変動±2以上 | history/ 全層、5〜10問 |
+| 3 | LC=2、90日超、規模変動±2以上 | history/ 全層、5〜10問 |
 
 動的格上げ/格下げ、3フェーズ実行（F1/F2/F3）、E1（曖昧応答）/E2（儀式拒否）対応の詳細は `ritual-protocol.md` を参照。
+
+---
+
+## Council Trust Level（CTL）（v4.2 新規）
+
+L0 spec-architect は REGIME.md 生成・更新時に Council Trust Level（CTL）を
+算出し記録する。CTL は Council の自律実行範囲を動的決定する軸であり、
+philosophy.md 第 6 条「人間 ≒ Council 原則」の実装規格。
+
+算出ロジック・stats.json スキーマ・invocations/ 構造の詳細は
+`crosscut-council/references/ctl-calculation.md` を参照。
+
+### 算出手順
+
+1. `~/.claude/council-data/stats.json` を読み込む
+   - ファイル不存在の場合: user-scope を初期化（CTL-0 で運用開始）
+2. `ctl-calculation.md` の `calculate_ctl(stats)` で CTL を算出
+3. REGIME.md に以下を記録（モード定義ブロックと並列）:
+   - `ctl: CTL-X`
+   - `ctl_calculated_at: <ISO 8601>`
+   - `delegation_scope: [自律実行されるカテゴリ]`
+   - `escalation_categories: [献上されるカテゴリ]`
+   - `council_data_version: <stats.json の version>`
+
+### REGIME.md への記録フォーマット
+
+```markdown
+## Council Trust Level
+- ctl: CTL-2
+- ctl_calculated_at: 2026-04-25T10:30:00Z
+- delegation_scope: [C1, C3, C4]
+- escalation_categories: [C2]
+- council_data_version: 0.1
+```
+
+`council_data_version` は `~/.claude/council-data/version.md` の `version` 値および
+`stats.json` の `version` 値とリテラルが一致する（`v` 接頭辞は付けない）。
+
+### CTL とモード（M1/M2/L2）の関係
+
+CTL とモードは独立した軸。組み合わせ例:
+
+| モード | CTL | 含意 |
+|---|---|---|
+| M1 + CTL-0 | 単体実行、Council 全件献上 | 新規ユーザー |
+| M2 + CTL-2 | 標準実行、Council 大半が自律 | 慣れたユーザー |
+| L2 + CTL-3 | 統括実行、Council 全面自律 | 熟練ユーザー、大規模プロジェクト |
+
+### CTL-3 の例外
+
+CTL-3 ではほぼ全ての C カテゴリが Council 自律。ただし以下は例外として
+常に escalate_to_human:
+
+- conflict_type が E（前提対立）または G（メタ対立）
+- council_type が "life"（人生 Council）
+- H カテゴリ抵触検知時（H1 哲学変更 / H2 ルール変更 / H3 方向性発案 / H4 根本設計見直し）
+
+詳細は `crosscut-council/references/consensus-protocol.md` の `compute_consensus_mode` を参照。
 
 ---
 
@@ -159,10 +228,12 @@ Layer 0 → Layer 1 ＋ layer1-independent-reviewer による独立検証。
 
 Layer 0 → **Layer 2統括指揮 → 複数Layer 1並列 → layer2-integration-verifier統合検証**。
 
-- 構成：L0 → L2オーケストレータ → L1群（ドメイン分割・並列実行）＋ 各L1に layer1-independent-reviewer ＋ layer2-integration-verifier
+- 構成：L0 → L2オーケストレータ → L1群（ドメイン分割・並列実行）＋ 各L1に layer1-independent-reviewer ＋ layer2-integration-verifier ＋ 必要に応じ Playwright Test Agents
 - 検証：各L1の独立検証 ＋ 跨ぎドメイン整合性・全体不変条件・E2E検証
 - 所要トークン：大
 - 適用：L2発動閾値を超えるプロジェクトのみ
+
+**配下Agent構成の決定責務は L0**: どのサブエージェントを起動するか（Playwright Test Agents 起動要否・L1 並列ドメイン数・integration-verifier の検証範囲等）は、L0 が認識擦り合せで決定し REGIME.md / INTEGRATION.md に明示する。L2 は与えられた構成で統括実行に全集中する（構成変更は L0 差し戻し）。原則書は `../../layer2-orchestrator/references/sub-agent-protocol.md` を参照。
 
 ---
 
@@ -170,16 +241,26 @@ Layer 0 → **Layer 2統括指揮 → 複数Layer 1並列 → layer2-integration
 
 いずれか1つでも超えたら L2：
 
-| 閾値 | 値 |
-|---|---|
-| SPEC.md トークン数 | >15k トークン（≒60ページ） |
-| 成果物ファイル数 | >80ファイル |
-| 成果物総行数 | >10k行 |
-| 独立ドメイン数 | ≥5 |
-| 並行可能サブゴール数 | ≥3 |
-| L1 1サイクルの想定時間 | >2時間 |
+| 閾値 | 値 | 系統 |
+|---|---|---|
+| SPEC.md トークン数 | >15k トークン（≒60ページ） | 規模系 |
+| 成果物ファイル数 | >80ファイル | 規模系 |
+| 成果物総行数 | >10k行 | 規模系 |
+| 独立ドメイン数 | ≥5 | 規模系 |
+| 並行可能サブゴール数 | ≥3 | 規模系 |
+| L1 1サイクルの想定時間 | >2時間 | 規模系 |
+| UI画面数 | ≥10 | 内容系 |
+| E2Eシナリオ数 | ≥20 | 内容系 |
+| インタラクション深度 | ≥5 段 | 内容系 |
+| 層間不変条件数 | ≥15 | 内容系 |
+
+「いずれか1つでも超えたら L2」のロジックは維持。系統（規模系 / 内容系）は分析時の参考情報であり、判定マトリクスにはしない（フラクタル原則：L2 は単一責務）。
 
 **AI能力バージョンを必ず REGIME.md に記録する**。将来モデルの能力向上に伴い閾値は緩和可能。
+
+### 発動判定および配下構成決定は L0 の責務
+
+L2 発動の判定は本表の閾値で L0 が行う。発動後の **L2 配下 Agent 構成**（Playwright Test Agents 起動要否・L1 並列ドメイン数・integration-verifier 検証範囲等）も L0 が認識擦り合せで決定し、REGIME.md / INTEGRATION.md に明示する。L2 自身は構成を判断しない（与えられた構成で実行に全集中）。
 
 ---
 
@@ -323,6 +404,75 @@ REGIME.md に以下を記録する。未記載時のデフォルトは **L0-2**�
 
 ---
 
+## dev_mode 判定（v5.0.0 追加 / v5.6.0 で `autonomous` 本格化）
+
+GitHub 連携前提の自律駆動を 3 段階で表現する追加軸。規模・チーム軸と並列の動的判定軸として L0 対話で取得する。
+
+### モード境界
+
+| モード | GitHub | Actions | Issue 自動化 | 並列実装 | 自動 merge | 人間関与範囲 |
+|---|---|---|---|---|---|---|
+| `local_only` | × | × | × | × | × | 全 Layer |
+| `github_assisted` | ○ | 任意 | × | 手動 | × | L0 + 承認 |
+| `autonomous` | ○ | ○ | ○ | 自動 | ○（scope 依存）| **P1〜P4 のみ**（philosophy.md §7 Person 責務） |
+
+旧名 `github_autonomous` は v5.6.0 で `autonomous` にリネーム（autonomous_scope 軸との整合）。後方互換は §dev_mode 旧名対応 参照。
+
+### 判定プロトコル（2 段階判定）
+
+#### 質問1：GitHub 利用の有無
+
+L0 対話の 2.0〜2.5 ターン目で 1 回だけ質問する：
+
+> 「GitHub を使いますか？（Issue・PR・Actions の運用を含む）」
+
+- **No** → `local_only` 確定（追加質問なし）
+- **Yes** → 質問2 へ
+
+#### 質問2：規模 + LC からの推論（ユーザー確認）
+
+判定マトリクス（v5.0.0 時点）：
+
+| 規模 | LC | 推論 dev_mode |
+|---|---|---|
+| M1 | * | `github_assisted` |
+| M2 | LC=0 | `github_assisted` |
+| M2 | LC≥1 | `github_assisted`（運用実績で `github_autonomous` 昇格判断） |
+| L2 | * | `github_autonomous`（並列実装が前提） |
+
+推論結果を提示してユーザー確認（1 回のみ）：
+
+> 「dev_mode は `[推論結果]` を推奨します。理由：[規模 + LC の根拠]。このまま採用しますか？」
+
+ユーザーが推奨と異なる選択をした場合はそのまま採用し、ADR に根拠を記録する（spec §3.2.3）。
+
+### チーム軸（T1-T5）について
+
+spec §3.1.1 / §3.2.2 では dev_mode 推論にチーム軸（T1: 個人 〜 T5: 大規模分散チーム）を含める設計だが、v5.0.0 時点では既存軸（規模・LC）のみで運用する。チーム軸の operational 化は v5.x の minor 改修で扱う予定（INTENT.md 参照）。
+
+### REGIME.md への記録
+
+REGIME.md の `## dev_mode` セクションに以下を記録：
+
+```markdown
+## dev_mode
+
+- mode: github_assisted   # local_only / github_assisted / github_autonomous
+- ctl: 0                  # CTL段階（0-3）。crosscut-council/references/ctl-calculation.md 参照
+- 判定根拠: GitHub 利用、規模 M2、LC=1
+```
+
+### 昇格・降格（手動 + ADR 記録必須）
+
+dev_mode の変更は人間判断による。昇格・降格いずれも `history/ARCH-DECISIONS.md` に記録（変更前後 / 根拠 / 影響範囲）。
+自動降格メカニズム（CI 連続失敗 等）は `templates/.github/workflows/auto-degrade.yml` で実装（spec §3.2.10）。
+
+### 「GitHub 無しでも DH ベースは完全動作」の原則
+
+`local_only` を選択しても DH の自律駆動性能は劣化しない。GitHub 連携は段階的拡張オプションであり、必須ではない。
+
+---
+
 ## プロトコルの自己評価
 
 判定精度を継続改善するため、献上後のフィードバックで以下を蓄積する。
@@ -336,3 +486,94 @@ REGIME.md に以下を記録する。未記載時のデフォルトは **L0-2**�
 - C1 判断献上の頻度（多すぎ＝仕様不足、少なすぎ＝スコープ逸脱の見落とし）
 
 蓄積データから判定表の閾値を調整する。
+
+---
+
+## autonomous_scope 判定（v5.6.0 追加、dev_mode = autonomous の場合のみ）
+
+`dev_mode` が `autonomous` に決定したら、autonomous-drive 機構の運用粒度を 3 値で取得する。
+
+### scope 境界
+
+| autonomous_scope | 自動 merge | PR review/approve | P3（事後確認）の位置 | Person 責務範囲 |
+|---|---|---|---|---|
+| **`full`**（デフォルト） | 有効（`auto-merge` label opt-in + 多層検証通過時） | AI / 独立 critic | merge 後 | P1〜P4 のみ |
+| `merge_gated` | 無効（人間 approve 必須） | 人間 | merge 前 | P1〜P4 + PR review |
+| `custom` | 部分有効（dev-env-spec.md Level C 詳細指定） | 個別 | 個別 | 個別 |
+
+### 判定プロトコル
+
+dev_mode = `autonomous` 確定後に 1 問のみ：
+```
+Q: 自律駆動の度合いを選択してください
+   (1) フルオート [デフォルト]
+   (2) 中度 (merge は人間)
+   (3) カスタム
+```
+→ デフォルト = `full`、ユーザー裁量で `merge_gated` / `custom` に降格可。
+
+### dev_mode 旧名対応（後方互換）
+
+v5.0.0〜v5.5.x で記録された REGIME.md は `dev_mode: github_autonomous` のままで動作する（`autonomous` + `autonomous_scope: full` と等価扱い）。新規プロジェクトでは新名 `autonomous` を使用する。明示的な migration は要求しない（philosophy.md 第 5 条「タイプ二項分類の限界」と同様、運用慣行で吸収）。
+
+### Person 責務範囲との対応
+
+`autonomous_scope: full` を選択した場合の人間関与は philosophy.md 第 7 条 Person 責務 P1〜P4 に集約：
+- P1 発案 / P2 ブレスト（Issue 化は AI）/ P3 事後確認・評価 / P4 暴走時介入
+
+`merge_gated` では P3 を merge 前に倒すため、PR review/approve も人間関与に追加。`custom` は dev-env-spec.md Level C で個別指定。
+
+### ADR 記録要請
+
+`autonomous_scope` の昇格・降格（例: `merge_gated` → `full`）は手動 + ADR 記録必須（dev_mode 変更と同形式）。観測駆動: 数 PR の運用観測後に降格 / 昇格を判断（v5.5.3 AD-022 の観測駆動原則を継承）。
+
+---
+
+## current_focus 判定（v5.7.0 追加、autonomous-drive 入口側 Issue pickup で参照）
+
+REGIME.md の `## current_focus` セクションは、autonomous-drive 入口側（Issue → AI pickup）で「pickup すべき Issue か」を判定する基準として使われる。
+
+### フィールド規約
+
+```yaml
+## current_focus
+- type: bug-fix          # bug-fix / feature / refactor / docs / chore
+- target: master         # 対象ブランチ
+- since: 2026-05-03      # 開始日
+- priority: critical     # critical / standard / low
+```
+
+### β 半自動更新（推奨パス）
+
+spec-architect が対話で「今このプロジェクトで何に集中？」を確認し、AI が REGIME.md を更新する。philosophy.md 第 4 条「モード判定は L0」+ 第 7 条 P1/P2「人間 = 頭と口、AI = 手」と整合：
+
+- 例: ユーザー「v5.7.0 のバグを直したい」→ spec-architect が `current_focus.type: bug-fix` と更新
+- 例: ユーザー「次は新機能の v5.8.0 に集中したい」→ `current_focus.type: feature` + `since: <today>` 更新
+- 更新タイミング: 新規機能着手時、フェーズ切替時、振り返り儀式時
+
+### γ ブランチ命名フォールバック
+
+REGIME.md `current_focus` 未設定時、ブランチ命名から自動推論する（人間に確認しない）：
+
+| ブランチ命名 | 推論 type |
+|---|---|
+| `fix/*` `bugfix/*` `hotfix/*` | bug-fix |
+| `feat/*` `feature/*` | feature |
+| `refactor/*` `chore/refactor/*` | refactor |
+| `docs/*` | docs |
+| `chore/*` | chore |
+
+優先順位: REGIME.md 値 > ブランチ命名推論。両者が衝突する場合は REGIME.md 値を採用。
+
+### Issue pickup 時の照合
+
+`crosscut-issue-implementer` の AI triage 段階で参照（詳細は `crosscut-issue-implementer/references/triage-protocol.md`）：
+
+- Issue label `type:bug` + current_focus.type: `bug-fix` → 整合 → pickup 候補
+- Issue label `type:feature` + current_focus.type: `bug-fix` → 不整合 → skip + label `focus-mismatch` 自動付与
+- Issue label 未指定 + current_focus.type: `bug-fix` → AI が Issue 本文から推論
+
+### 後方互換性
+
+- 既存 REGIME.md に `current_focus` セクションがない場合 → 全 Issue を pickup 対象として扱う（filter 前提なし）
+- 利用者プロジェクトへの遡及適用なし、新規追加のみ
