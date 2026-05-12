@@ -33,6 +33,9 @@
 ## ドメイン文脈（任意・該当プロジェクトのみ）
 → DOMAIN-CONTEXT.md
 （機密情報は DOMAIN-CONTEXT.secret.md に分離。Git 管理外）
+
+## 視覚仕様（任意・UI プロジェクトのみ）
+→ DESIGN.md
 ```
 
 ---
@@ -58,8 +61,25 @@
 - [条件1]: [具体的な数値や挙動の記述]
 - [条件2]: [具体的な数値や挙動の記述]
 
-#### 優先順位
-[高 / 中 / 低]
+#### Priority
+[critical / standard / cosmetic]
+
+Priority は**運用時の検出スタック（建物）**で何階まで使うかを決める。**Shift Left 基盤（土地）は Priority に関わらず常に整備される前提**であり、階数に加算しない。
+
+- **critical**: 第1〜5層すべてを使用（第1層計算的センサー + 第2層 E2E + 第3層 Interaction Cost + 第4層推論的 + 第5層人間判断）
+- **standard**: 第1〜3層まで使用（E2E と Interaction Cost まで）
+- **cosmetic**: 第1層のみ使用（型・ビルド・テストのみ）
+
+旧記法（高/中/低）は後方互換のため受理する（高=critical / 中=standard / 低=cosmetic）。
+
+#### UX制約（任意）
+[UX 3問プロトコルで回答された Must 閾値と禁止挙動]
+
+- Must 閾値: [クリック数・遷移深度・応答時間・完了率・エラー率 等]
+- 禁止挙動: [特定操作の禁止や警告表示の必須化 等。DONT.md にも転記]
+- 参考類似サービス: [インスピレーション源。AI が類似UXパターンを参照可能にする]
+
+未指定時は業界標準値（クリック 3-5 回・遷移 3 以内・応答 30 秒以内・完了率 95%・エラー率 5%）を適用。詳細は `../SKILL.md` ステップ 2.5 を参照。
 
 #### エッジケース（任意）
 [判明しているエッジケースがあれば記述。なければ省略可]
@@ -70,6 +90,40 @@
 ## 制約
 - [守るべき規約、使ってはいけない技術、予算上限等]
 - ARC: [選択パターン名]（未指定時は monolith。選択肢は `arc-patterns/` 配下参照）
+
+## 機能間相互作用（永続化レイヤ・状態共有）
+
+複数機能が同一の永続化レイヤ（DB / localStorage / ファイル等）または共有状態を読み書きする場合、
+機能ごとの仕様だけでは整合性を保てない可能性がある。以下を明示する：
+
+- **共有レイヤ一覧**：機能 A・B・C がどのキー／テーブル／ストアを共有するか
+- **副作用マトリクス**：機能 X の実行が機能 Y の状態にどう影響するか
+- **同時刻整合性ルール**：例「インポート時は A 層スナップショットも当日付で強制更新」
+
+このセクションは**データ系機能・永続化機能・トランザクション系機能**で必須。
+ステートレスな表示系・計算系のみの機能では省略可。
+
+[省略可の判定基準]
+- 永続化レイヤへの書き込みを行わない機能：省略可
+- 共有キーが 2 つ未満：副作用マトリクス記述は任意
+- ステートレスな表示系・計算系のみ：省略可
+
+### 共有レイヤ一覧
+[例]
+- localStorage キー "user_preferences"：設定機能・テーマ機能で共有
+- DB テーブル "sessions"：認証機能・ログ機能で共有
+
+### 副作用マトリクス
+[例]
+| 機能実行 | 影響先機能 | 副作用内容 |
+|---------|-----------|-----------|
+| データインポート | スナップショット機能 | 古いスナップショットが無効化される |
+| ユーザー削除 | セッション管理 | 該当ユーザーのセッションが強制終了 |
+
+### 同時刻整合性ルール
+[例]
+- インポート実行時は、A 層スナップショットを同日付で強制更新する
+- ユーザー削除時は、関連セッションを同一トランザクション内で削除する
 
 ## データモデル進化（任意・詳細は `schema-evolution.md`）
 
@@ -135,6 +189,30 @@ AI能力の向上に伴い、将来的にスコープ内に移行する可能性
 ## 判定結果
 モード: [M1 / M2 / L2]
 
+## dev_mode（v5.0.0 追加 / v5.6.0 で `autonomous` 本格化）
+- mode: [local_only / github_assisted / autonomous]
+- ctl: [0 / 1 / 2 / 3]   # Council Trust Level（crosscut-council/references/ctl-calculation.md 参照）
+- 判定根拠: [GitHub 利用有無 + 規模 + LC の組み合わせ]
+
+旧名 `github_autonomous` は v5.6.0 で `autonomous` にリネーム。後方互換: 既存記述で `github_autonomous` は `autonomous` + `autonomous_scope: full` と等価扱い。
+
+（判定プロトコルは `regime-assessment.md` §dev_mode 判定 参照。昇格・降格は手動 + ADR 記録必須。）
+
+## autonomous_scope（v5.6.0 追加、dev_mode = autonomous の場合のみ記載）
+- scope: [full / merge_gated / custom]
+- 判定根拠: [autonomous-drive 機構の運用粒度の選択理由]
+- deployment: [crosscut-autonomous-drive skill による template 適用済 / 未適用 / 部分適用]
+
+（判定プロトコルは `regime-assessment.md` §autonomous_scope 判定 参照。詳細は `dev-env-spec.md` Level C 参照。Person 責務 P1〜P4 と autonomous_scope の対応は `philosophy.md` 第 7 条参照。）
+
+## current_focus（v5.7.0 追加、autonomous-drive 入口側 Issue pickup で参照）
+- type: [bug-fix / feature / refactor / docs / chore]   # 今このプロジェクトで何に集中しているか
+- target: [master / develop / 等のブランチ名]
+- since: [YYYY-MM-DD]
+- priority: [critical / standard / low]
+
+（判定プロトコルは `regime-assessment.md` §current_focus 判定 参照。β 半自動: spec-architect 対話で更新、γ ブランチ命名フォールバック: `fix/*` `feat/*` `refactor/*` から推論。Issue pickup 時の整合判定で参照される。dev_mode `autonomous` でなくても記録可能だが、active 機能として効くのは autonomous-drive 入口側稼働時）
+
 ## 判定根拠
 
 ### 規模スコアの内訳
@@ -197,6 +275,24 @@ AI能力の向上に伴い、将来的にスコープ内に移行する可能性
 - ドメインB: S=X, U=Y, R=Z → モード [M1/M2]
 - ...
 - ドメイン間インターフェース: [概要。詳細は DOMAINS.md]
+
+## L2 配下Agent構成指定（L2判定の場合のみ記載）
+
+L0 が認識擦り合せで決定し明示する。L2 はこの指定を受け取って実行する（L2 は構成を判断しない）。
+詳細プロトコルは `../../layer2-orchestrator/references/sub-agent-protocol.md` を参照。
+
+```yaml
+L2-subagents:
+  playwright-test-agents:
+    enabled: [true / false]
+    agents: [Planner, Generator, Healer, Reviewer]  # enabled=true の場合
+  l1-parallel:
+    enabled: [true / false]
+    domains: [ドメインA, ドメインB, ...]
+  integration-verifier:
+    enabled: true  # L2 では常時 true
+    scope: [cross-domain-invariants, e2e-scenarios, ...]
+```
 
 ## LC（1→5運用対応）
 - LC: [LC=0 / LC=1 / LC=2]
