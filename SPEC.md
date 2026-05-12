@@ -419,3 +419,54 @@
   - ローカル完結のバックアップ（localStorage 二重化 + ユーザー端末内ファイル書き出し）は採用する（→ バックアップ機能セクション参照）
 - 日本語のみ対応
 - ARC: モノリス（固定）
+
+---
+
+## データモデル進化（`schema-evolution.md` 準拠）
+
+### 適用判断
+本プロジェクトは ARC=monolith かつ完全ローカル動作だが、以下の理由で本セクションを記入する：
+- 妻が実機（iPhone 11）で運用中、既存 localStorage レコードが存在する
+- バックアップ B 層で書き出した JSON ファイルが端末内に蓄積されており、過去バージョンとの互換性を保つ必要がある
+
+### 現行バージョン
+- localStorage プライマリキー: `cookpato:data:v1`
+- バックアップキー: `cookpato:backup:v1`（A 層ローリングスナップショット）
+- 最終書き出し記録: `cookpato:lastExport:v1`
+- AppData スキーマバージョン: v1（破壊的変更未発生のため v1 継続）
+
+### 互換性ポリシー
+**full-compat（完全互換）** を原則とする。
+- 新フィールド追加時はオプショナルとし、読み取り側でデフォルト値を注入する
+- 既存フィールドの削除・型変更・セマンティクス変更は禁止
+- 破壊的変更が必要な場合は `cookpato:data:v2` への移行を計画し、SPEC.md にマイグレーション手順を明記する
+
+### 既存フィールドの互換性実装（実装済み）
+
+| フィールド | 既存データの扱い | 実装箇所 |
+|---|---|---|
+| `AppData.favorites`（ルート配列） | なし → 空配列として読み込み | `src/lib/storage.ts` `coerceAppData` |
+| `StockItem.qty` | なし／不正値 → `1` として読み込み（0 未満は 0 にクランプ） | `src/lib/storage.ts` `coerceStockItem` |
+| `AppData.completedWeeks` | なし → 空配列で初期化。保存値と現在 `meals` 由来の既達成週を union（`unionSorted` + `computeAllCompleteWeekSundays`） | `src/lib/storage.ts` `coerceAppData` |
+| `DayMeals.memo`（ちょいメモ） | なし／空文字 → `undefined`（オプショナル扱い） | `src/lib/storage.ts` `coerceMeals` |
+| `MealLine.cart`（買い物マーカー） | なし → `false` 扱い（`true` のみセット） | `src/lib/storage.ts` `coerceMeals` |
+
+`useAppData.ts` はこれらの coerce 後 `AppData` をロード／保存する薄いフックであり、デフォルト注入の本体は `src/lib/storage.ts` 側にある。
+
+### デプロイ戦略
+**versioned-endpoint 相当**（localStorage キーにバージョン番号を明示し、複数バージョンを同時共存可能にする）。
+- 新スキーマ導入時は新キー（例: `cookpato:data:v2`）を追加し、`expand-contract` を実施
+  1. **expand**: 旧キーから読み、両方に書く（dual-write）
+  2. **backfill**: 起動時に旧キーのデータを新キーへコピー
+  3. **switch-read**: 読み取りを新キーに切り替え
+  4. **contract**: 旧キーを削除（**前提条件**: switch-read 完了後、最低 4 週間の待機期間中にエラー発生ゼロ、かつバックアップ A 層スナップショットが新スキーマで安定稼働していること）
+- バックアップ B 層の JSON ファイルは「読み取り互換」のみ保証（妻が過去ファイルから復元できればよい）
+
+### 進行中のマイグレーション
+- なし（v1 継続中）
+
+### 禁止事項
+- **expand-contract プロトコル外**での既存 localStorage キーの直接削除（妻の端末でデータ消失する）
+  - 上記「デプロイ戦略 4. contract」の前提条件を全て満たした場合のみ削除可。それ以外は禁止
+- 互換性を欠く JSON スキーマでのバックアップファイル生成（過去ファイルからの復元が壊れる）
+- スキーマレジストリ等の外部サービス依存（完全ローカル原則違反）

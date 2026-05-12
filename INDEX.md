@@ -18,10 +18,16 @@
 → DONT.md
 
 ## 開発体制
-→ REGIME.md（モード: M1 単体 / Lifecycle: L=1 / ARC: monolith）
+→ REGIME.md（モード: M1 単体 / LC=1 / ARC: monolith）
 
 ## 開発環境
 → CLAUDE.md, .claude/skills/, sensors/
+
+## 履歴層（LC=1）
+→ history/SUMMARY.md（圧縮サマリ）
+→ history/INTENT.md（機能の意図・却下案・確度）
+→ history/CHANGELOG.md（時系列変遷）
+→ history/REGIME-LOG.md（判定×実績の対応表）
 
 ## 開発ノート
 → docs/IOS-SAFARI-NOTES.md（IME × controlled input、setPointerCapture、touch-action、長押し領域外リリース等の落とし穴集）
