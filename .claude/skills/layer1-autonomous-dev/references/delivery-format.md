@@ -50,7 +50,7 @@ delivery/
 ├── DELIVERY.md          # 献上レポート（全モード必須）
 ├── VERIFICATION.md      # 独立検証レポート（M2以上で必須）
 ├── INTEGRATION.md       # 統合レポート（L2のみ。L2オーケストレータが生成）
-├── HISTORY-DIFF.md      # 履歴層更新差分（Lifecycle ≥ 1 で必須）
+├── HISTORY-DIFF.md      # 履歴層更新差分（LC ≥ 1 で必須）
 ├── src/                 # ソースコード
 ├── tests/               # テストコード
 └── (その他プロジェクトファイル)
@@ -272,9 +272,9 @@ PASS / FAIL
 
 ---
 
-## HISTORY-DIFF.md（Lifecycle ≥ 1 で必須）
+## HISTORY-DIFF.md（LC ≥ 1 で必須）
 
-既存プロジェクト（L=1/L=2）の献上時に、L1 が生成する履歴層更新差分。
+既存プロジェクト（LC=1/LC=2）の献上時に、L1 が生成する履歴層更新差分。
 人間は承認レベル（A/B/C）ごとにレビューする。
 
 ### テンプレート
@@ -282,8 +282,8 @@ PASS / FAIL
 ```markdown
 # 履歴層更新差分
 
-## Lifecycle
-- 現在の Lifecycle: [L=1 / L=2]
+## LC
+- 現在の LC: [LC=1 / LC=2]
 - 儀式レベル: [0 / 1 / 2 / 3]（L0 儀式で採用された値、スキップ時は「スキップ」）
 - 儀式スキップの有無: [あり（E2 拒否） / なし]
 
