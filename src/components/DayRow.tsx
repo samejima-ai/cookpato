@@ -26,6 +26,8 @@ type Props = {
   onDeleteLine: (lineIndex: number) => void;
   /** ちょいメモ（料理行とは別枠）の更新 */
   onMemoChange: (text: string) => void;
+  /** 「＋追加」ボタン押下時：空 Line を 1 つ append する */
+  onAddLine: () => void;
   /**
    * 編集中のカーソル行テキストと、その行が属する日付を親に通知する。
    * 編集開始時にも呼び、編集終了（blur）時は空文字で呼ぶ。
@@ -51,6 +53,7 @@ export function DayRow({
   onToggleCart,
   onDeleteLine,
   onMemoChange,
+  onAddLine,
   onActiveQueryChange,
   onBeginEdit,
   onCommitEdit,
@@ -123,9 +126,15 @@ export function DayRow({
         : "text-neutral-700";
 
   const bgClass = isToday ? "bg-yellow-50" : "bg-white";
-  const isEmptyDay = lines.length === 0 || (lines.length === 1 && lines[0]?.text === "");
 
   const pendingText = pendingDelete !== null ? (lines[pendingDelete]?.text ?? "") : "";
+
+  const handleAddLine = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    tapFeedback();
+    onAddLine();
+    setEditing(true);
+  };
 
   return (
     <div className={`flex gap-3 px-3 py-2 border-b border-neutral-100 ${bgClass}`}>
@@ -135,6 +144,18 @@ export function DayRow({
         </div>
         {holidayName && <HolidayLabel name={holidayName} />}
         {isToday && <div className="text-xs text-yellow-700 mt-0.5">今日</div>}
+        {/* シマエナガ（cheer）：日付列内の装飾要素。タップ無効。
+            起動時に自動生成された 4 空行の日にも継続表示するため、cheer.ts の
+            isEmptyDay 拡張定義（全行 text==="" も空日扱い）と組み合わせて動く。 */}
+        {showCheer && (
+          <img
+            src={emptyDayImg}
+            alt=""
+            aria-hidden="true"
+            draggable={false}
+            className="w-10 h-10 opacity-80 animate-cheer-flip mt-0.5 pointer-events-none select-none"
+          />
+        )}
         {/* iOS Safari の IME 多重入力バグ対策として、key={dateKey} で日付ごとに input を再マウントし
             uncontrolled パターン（defaultValue）を採る。SPEC.md「ちょいメモ」参照。 */}
         <MemoField
@@ -194,44 +215,40 @@ export function DayRow({
             tabIndex={0}
             aria-label={`${formatDayLabel(dateKey)} の献立を編集`}
           >
-            {isEmptyDay ? (
-              <span className="flex items-center gap-2">
-                <span className="text-neutral-300 text-base">＋</span>
-                {showCheer && (
-                  <img
-                    src={emptyDayImg}
-                    alt=""
-                    aria-hidden="true"
-                    className="w-10 h-10 opacity-80 animate-cheer-flip"
+            <ul>
+              {lines.map((line, idx) =>
+                line.text === "" ? null : (
+                  <LineItem
+                    // biome-ignore lint/suspicious/noArrayIndexKey: 行の並べ替えはせず、追加・削除のみなので index をキーにしてよい（SPEC.md 準拠）
+                    key={`${dateKey}-${idx}`}
+                    text={line.text}
+                    done={line.done}
+                    favorite={favoriteKeys.has(favoriteKey(line.text))}
+                    cart={line.cart === true}
+                    wobble={wobbleIndex === idx}
+                    rowRef={wobbleIndex === idx ? wobbleRowRef : undefined}
+                    onToggle={() => onToggleLine(idx)}
+                    onToggleFavorite={() => onToggleFavorite(idx)}
+                    onToggleCart={() => onToggleCart(idx)}
+                    onLongPress={() => setWobbleIndex(idx)}
+                    onRequestDelete={() => {
+                      setWobbleIndex(null);
+                      setPendingDelete(idx);
+                    }}
                   />
-                )}
-              </span>
-            ) : (
-              <ul>
-                {lines.map((line, idx) =>
-                  line.text === "" ? null : (
-                    <LineItem
-                      // biome-ignore lint/suspicious/noArrayIndexKey: 行の並べ替えはせず、追加・削除のみなので index をキーにしてよい（SPEC.md 準拠）
-                      key={`${dateKey}-${idx}`}
-                      text={line.text}
-                      done={line.done}
-                      favorite={favoriteKeys.has(favoriteKey(line.text))}
-                      cart={line.cart === true}
-                      wobble={wobbleIndex === idx}
-                      rowRef={wobbleIndex === idx ? wobbleRowRef : undefined}
-                      onToggle={() => onToggleLine(idx)}
-                      onToggleFavorite={() => onToggleFavorite(idx)}
-                      onToggleCart={() => onToggleCart(idx)}
-                      onLongPress={() => setWobbleIndex(idx)}
-                      onRequestDelete={() => {
-                        setWobbleIndex(null);
-                        setPendingDelete(idx);
-                      }}
-                    />
-                  ),
-                )}
-              </ul>
-            )}
+                ),
+              )}
+            </ul>
+            {/* 「＋追加」ボタン：行末常設。空 Line を 1 つ append して編集モードへ。
+                親 <div role="button"> の編集モード進入と分けるため stopPropagation。 */}
+            <button
+              type="button"
+              onClick={handleAddLine}
+              aria-label="行を追加"
+              className="w-11 h-11 flex items-center justify-center text-neutral-300 active:text-neutral-500 touch-manipulation"
+            >
+              ＋
+            </button>
           </div>
         )}
       </div>

@@ -3,12 +3,16 @@
  * 1箇所に集約することで副作用をカプセル化する。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
+import { CHEER_AUTO_LINE_COUNT, computeCheerDates, isEmptyDay } from "../lib/cheer";
 import { startOfWeekKey, todayKey } from "../lib/date";
 import { generateId } from "../lib/id";
 import { favoriteKey } from "../lib/normalize";
 import { loadDataWithRecovery, maybeUpdateSnapshot, saveData, saveSnapshot } from "../lib/storage";
 import { isWeekComplete } from "../lib/week";
 import type { AppData, DateKey, DayMeals, MealLine } from "../types";
+
+/** 日付境界を検知するためのポーリング間隔（ms） */
+const DAILY_TICK_MS = 60_000;
 
 export type AppDataApi = {
   data: AppData;
@@ -20,6 +24,15 @@ export type AppDataApi = {
   restoreData: (data: AppData) => void;
   /** 1日分の献立テキストを更新（即時保存） */
   setMealsText: (date: DateKey, text: string) => void;
+  /**
+   * 指定された日付群のうち空日（isEmptyDay 真）に対してのみ、
+   * 空 Line を count 個ぶら下げる。既存入力がある日はスキップ。
+   * 起動時の自動行生成（シマエナガが発生する日に 4 行投入）に使う。
+   * 冪等：既に count 個以上の空行を持つ日は no-op。
+   */
+  bulkAddEmptyLines: (dates: DateKey[], count: number) => void;
+  /** その日に空 Line を 1 つ append する。「＋追加」ボタンから呼ぶ。 */
+  addLineAt: (date: DateKey, position: "end") => void;
   /** 1日分のちょいメモを更新（即時保存）。空文字は未設定扱い */
   setMemo: (date: DateKey, text: string) => void;
   /** 1日分の完了トグル（行インデックス単位） */
@@ -119,10 +132,23 @@ export function useAppData(): AppDataApi {
   // copy-on-write な状態なので参照保持で十分（深いコピー不要）。
   const editBaselineRef = useRef<Record<DateKey, DayMeals> | null>(null);
 
+  // 日付境界検知用の today。60s ポーリングで変化を拾い、自動生成 useEffect を再走させる。
+  const [currentToday, setCurrentToday] = useState<DateKey>(() => todayKey());
+
   // data が変わるたびに保存
   useEffect(() => {
     saveData(state.data);
   }, [state.data]);
+
+  // 日付境界の検知：60s 毎に今日キーを評価し、変化したら state を更新する。
+  // 識別子が同じならクランプ（setState で prev 返却）して再レンダさせない。
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      const t = todayKey();
+      setCurrentToday((prev) => (prev === t ? prev : t));
+    }, DAILY_TICK_MS);
+    return () => window.clearInterval(id);
+  }, []);
 
   const clearRestoredFlag = useCallback(() => {
     setState((prev) => (prev.restoredFromBackup ? { ...prev, restoredFromBackup: false } : prev));
@@ -160,6 +186,54 @@ export function useAppData(): AppDataApi {
       };
     });
   }, []);
+
+  const bulkAddEmptyLines = useCallback((dates: DateKey[], count: number) => {
+    if (count <= 0 || dates.length === 0) return;
+    setState((prev) => {
+      const nextMeals = { ...prev.data.meals };
+      let mutated = false;
+      for (const date of dates) {
+        const day = nextMeals[date];
+        if (!isEmptyDay(day)) continue;
+        const before = day?.lines ?? [];
+        // 既に count 個以上の空行があるなら no-op（冪等性ガード）
+        if (before.length >= count && before.every((l) => l.text === "")) continue;
+        const nextLines: MealLine[] = [];
+        for (let i = 0; i < count; i++) {
+          // 既存の空行があれば再利用（無駄な置換を避ける）
+          nextLines.push(before[i] ?? { text: "", done: false });
+        }
+        const nextDay: DayMeals = { lines: nextLines };
+        if (day?.memo) nextDay.memo = day.memo;
+        nextMeals[date] = nextDay;
+        mutated = true;
+      }
+      if (!mutated) return prev;
+      return { ...prev, data: { ...prev.data, meals: nextMeals } };
+    });
+  }, []);
+
+  const addLineAt = useCallback((date: DateKey, _position: "end") => {
+    setState((prev) => {
+      const day = prev.data.meals[date];
+      const before = day?.lines ?? [];
+      const nextLines: MealLine[] = [...before, { text: "", done: false }];
+      const nextDay: DayMeals = { lines: nextLines };
+      if (day?.memo) nextDay.memo = day.memo;
+      return {
+        ...prev,
+        data: { ...prev.data, meals: { ...prev.data.meals, [date]: nextDay } },
+      };
+    });
+  }, []);
+
+  // 起動時・日付変更時：今日〜today+6 の空日に CHEER_AUTO_LINE_COUNT 行を自動投入。
+  // 冪等性ガードにより、既に投入済みの日は state 識別子が変わらず再走しない。
+  useEffect(() => {
+    const targets = computeCheerDates(state.data.meals, currentToday);
+    if (targets.size === 0) return;
+    bulkAddEmptyLines(Array.from(targets), CHEER_AUTO_LINE_COUNT);
+  }, [state.data.meals, currentToday, bulkAddEmptyLines]);
 
   const setMemo = useCallback((date: DateKey, text: string) => {
     const trimmed = text;
@@ -373,6 +447,8 @@ export function useAppData(): AppDataApi {
     clearRestoredFlag,
     restoreData,
     setMealsText,
+    bulkAddEmptyLines,
+    addLineAt,
     setMemo,
     toggleLine,
     deleteLine,

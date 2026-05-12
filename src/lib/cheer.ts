@@ -7,12 +7,26 @@ import { addDaysKey } from "./date";
 
 const WINDOW_DAYS = 7;
 
-function isEmpty(day: DayMeals | undefined): boolean {
+/** 起動時自動生成のデフォルト行数 */
+export const CHEER_AUTO_LINE_COUNT = 4;
+
+/**
+ * その日が空（中身がない）か。
+ *
+ * 「中身がない」の定義は以下のいずれか：
+ * - DayMeals 自体が undefined
+ * - lines が 0 個
+ * - lines がすべて空文字（自動生成された 4 空行を含む）
+ *
+ * 起動時自動生成（useAppData の useEffect）で 4 空行が投入された日も
+ * 「空日」とみなされ、シマエナガ表示が継続する。妻が 1 行でも書き込めば
+ * 空日でなくなり、シマエナガは消える。
+ */
+export function isEmptyDay(day: DayMeals | undefined): boolean {
   if (!day) return true;
   const { lines } = day;
   if (lines.length === 0) return true;
-  if (lines.length === 1 && lines[0]?.text === "") return true;
-  return false;
+  return lines.every((l) => l.text === "");
 }
 
 /**
@@ -23,7 +37,7 @@ export function computeCheerDates(meals: Record<DateKey, DayMeals>, today: DateK
   const result = new Set<DateKey>();
   for (let i = 0; i < WINDOW_DAYS; i++) {
     const d = addDaysKey(today, i);
-    if (isEmpty(meals[d])) result.add(d);
+    if (isEmptyDay(meals[d])) result.add(d);
   }
   return result;
 }

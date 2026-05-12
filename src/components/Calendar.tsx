@@ -200,6 +200,7 @@ export function Calendar({ api, scrollTarget, onActiveQueryChange }: Props) {
                   onToggleCart={(i) => api.toggleCart(date, i)}
                   onDeleteLine={(i) => api.deleteLine(date, i)}
                   onMemoChange={(text) => api.setMemo(date, text)}
+                  onAddLine={() => api.addLineAt(date, "end")}
                   onActiveQueryChange={onActiveQueryChange}
                   onBeginEdit={api.beginMealsEdit}
                   onCommitEdit={api.commitMealsEdit}

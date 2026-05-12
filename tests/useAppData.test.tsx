@@ -1,6 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 import { useAppData } from "../src/hooks/useAppData";
+import { CHEER_AUTO_LINE_COUNT } from "../src/lib/cheer";
 import { favoriteKey } from "../src/lib/normalize";
 
 beforeEach(() => {
@@ -8,11 +9,113 @@ beforeEach(() => {
 });
 
 describe("useAppData", () => {
-  it("初期状態は空", () => {
+  it("初期状態：自動生成で today〜today+6 に空行が入り、stock/favorites は空", () => {
     const { result } = renderHook(() => useAppData());
-    expect(Object.keys(result.current.data.meals)).toHaveLength(0);
+    // 起動時 useEffect でシマエナガが発生する 7 日に空行が自動投入される
+    const days = Object.values(result.current.data.meals);
+    expect(days.length).toBe(7);
+    for (const day of days) {
+      expect(day.lines.length).toBe(CHEER_AUTO_LINE_COUNT);
+      expect(day.lines.every((l) => l.text === "")).toBe(true);
+    }
     expect(result.current.data.stock).toHaveLength(0);
     expect(result.current.data.favorites).toHaveLength(0);
+  });
+
+  describe("bulkAddEmptyLines（一括空行投入）", () => {
+    it("空日に空 Line × N を投入できる（遠未来日は自動生成対象外なのでテスト容易）", () => {
+      const { result } = renderHook(() => useAppData());
+      act(() => {
+        result.current.bulkAddEmptyLines(["2030-01-01", "2030-01-02"], 4);
+      });
+      expect(result.current.data.meals["2030-01-01"]?.lines.length).toBe(4);
+      expect(result.current.data.meals["2030-01-02"]?.lines.length).toBe(4);
+      expect(result.current.data.meals["2030-01-01"]?.lines.every((l) => l.text === "")).toBe(true);
+    });
+
+    it("既存入力がある日はスキップされる", () => {
+      const { result } = renderHook(() => useAppData());
+      act(() => {
+        result.current.setMealsText("2030-01-01", "カレー");
+      });
+      act(() => {
+        result.current.bulkAddEmptyLines(["2030-01-01"], 4);
+      });
+      expect(result.current.data.meals["2030-01-01"]?.lines.length).toBe(1);
+      expect(result.current.data.meals["2030-01-01"]?.lines[0]?.text).toBe("カレー");
+    });
+
+    it("冪等：既に N 個の空行を持つ日に再投入しても state 識別子が変わらない", () => {
+      const { result } = renderHook(() => useAppData());
+      act(() => {
+        result.current.bulkAddEmptyLines(["2030-01-01"], 4);
+      });
+      const before = result.current.data.meals["2030-01-01"];
+      act(() => {
+        result.current.bulkAddEmptyLines(["2030-01-01"], 4);
+      });
+      expect(result.current.data.meals["2030-01-01"]).toBe(before);
+    });
+
+    it("memo を持つ空日に投入しても memo が保持される", () => {
+      const { result } = renderHook(() => useAppData());
+      act(() => {
+        result.current.setMemo("2030-01-01", "外食");
+      });
+      act(() => {
+        result.current.bulkAddEmptyLines(["2030-01-01"], 4);
+      });
+      expect(result.current.data.meals["2030-01-01"]?.memo).toBe("外食");
+      expect(result.current.data.meals["2030-01-01"]?.lines.length).toBe(4);
+    });
+
+    it("count=0 や dates=[] は no-op", () => {
+      const { result } = renderHook(() => useAppData());
+      const before = result.current.data.meals;
+      act(() => {
+        result.current.bulkAddEmptyLines([], 4);
+        result.current.bulkAddEmptyLines(["2030-01-01"], 0);
+      });
+      expect(result.current.data.meals).toBe(before);
+    });
+  });
+
+  describe("addLineAt（行末追加）", () => {
+    it("空日に呼ぶと空行が 1 つ末尾に append される", () => {
+      const { result } = renderHook(() => useAppData());
+      act(() => {
+        result.current.addLineAt("2030-01-01", "end");
+      });
+      expect(result.current.data.meals["2030-01-01"]?.lines.length).toBe(1);
+      expect(result.current.data.meals["2030-01-01"]?.lines[0]?.text).toBe("");
+    });
+
+    it("既存行がある日に呼ぶと末尾に append される", () => {
+      const { result } = renderHook(() => useAppData());
+      act(() => {
+        result.current.setMealsText("2030-01-01", "カレー\nサラダ");
+      });
+      act(() => {
+        result.current.addLineAt("2030-01-01", "end");
+      });
+      const lines = result.current.data.meals["2030-01-01"]?.lines ?? [];
+      expect(lines).toHaveLength(3);
+      expect(lines[0]?.text).toBe("カレー");
+      expect(lines[1]?.text).toBe("サラダ");
+      expect(lines[2]?.text).toBe("");
+    });
+
+    it("memo を持つ日に呼んでも memo が保持される", () => {
+      const { result } = renderHook(() => useAppData());
+      act(() => {
+        result.current.setMemo("2030-01-01", "辛口");
+      });
+      act(() => {
+        result.current.addLineAt("2030-01-01", "end");
+      });
+      expect(result.current.data.meals["2030-01-01"]?.memo).toBe("辛口");
+      expect(result.current.data.meals["2030-01-01"]?.lines.length).toBe(1);
+    });
   });
 
   it("setMealsText で1日分のテキストを保存", () => {
