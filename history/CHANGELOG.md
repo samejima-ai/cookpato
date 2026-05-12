@@ -40,4 +40,4 @@
 - 拡張サイクル（PR #6〜#10）: `HANDOVER.md`「現在のリポジトリ状態」を参照
 - 既知未検証事項: `DELIVERY.md` 末尾 / `HANDOVER.md`「次にやる作業」優先度: 高 を参照
 
-将来サイクルで「過去機能の廃止候補」が発生した場合は、本 CHANGELOG の該当機能 ID を INTENT.md に向けてリンクし、廃止判断プロトコル（SKILL.md「廃止判断プロトコル」）を適用する。
+将来サイクルで「過去機能の廃止候補」が発生した場合は、本 CHANGELOG の該当機能 ID を INTENT.md に向けてリンクし、廃止判断プロトコル（`.claude/skills/layer0-spec-architect/SKILL.md` 「廃止判断プロトコル」セクション）を適用する。

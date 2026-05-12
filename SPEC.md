@@ -445,10 +445,13 @@
 
 | フィールド | 既存データの扱い | 実装箇所 |
 |---|---|---|
-| `meal.favorites` | なし → 空配列として読み込み | `useAppData.ts` のロード時 |
-| `stockItem.qty` | なし → 1 として読み込み | `useAppData.ts` のロード時 |
-| `AppData.completedWeeks` | なし → 空配列で初期化、loadData 時に保存値と現在 meals 由来の既達成週を union | `useAppData.ts` |
-| `meal.note`（ちょいメモ） | なし → 空文字として扱う | `useAppData.ts` |
+| `AppData.favorites`（ルート配列） | なし → 空配列として読み込み | `src/lib/storage.ts` `coerceAppData` |
+| `StockItem.qty` | なし／不正値 → `1` として読み込み（0 未満は 0 にクランプ） | `src/lib/storage.ts` `coerceStockItem` |
+| `AppData.completedWeeks` | なし → 空配列で初期化。保存値と現在 `meals` 由来の既達成週を union（`unionSorted` + `computeAllCompleteWeekSundays`） | `src/lib/storage.ts` `coerceAppData` |
+| `DayMeals.memo`（ちょいメモ） | なし／空文字 → `undefined`（オプショナル扱い） | `src/lib/storage.ts` `coerceMeals` |
+| `MealLine.cart`（買い物マーカー） | なし → `false` 扱い（`true` のみセット） | `src/lib/storage.ts` `coerceMeals` |
+
+`useAppData.ts` はこれらの coerce 後 `AppData` をロード／保存する薄いフックであり、デフォルト注入の本体は `src/lib/storage.ts` 側にある。
 
 ### デプロイ戦略
 **versioned-endpoint 相当**（localStorage キーにバージョン番号を明示し、複数バージョンを同時共存可能にする）。
@@ -456,13 +459,14 @@
   1. **expand**: 旧キーから読み、両方に書く（dual-write）
   2. **backfill**: 起動時に旧キーのデータを新キーへコピー
   3. **switch-read**: 読み取りを新キーに切り替え
-  4. **contract**: 旧キーを削除（最低 4 週間の待機期間を置く）
+  4. **contract**: 旧キーを削除（**前提条件**: switch-read 完了後、最低 4 週間の待機期間中にエラー発生ゼロ、かつバックアップ A 層スナップショットが新スキーマで安定稼働していること）
 - バックアップ B 層の JSON ファイルは「読み取り互換」のみ保証（妻が過去ファイルから復元できればよい）
 
 ### 進行中のマイグレーション
 - なし（v1 継続中）
 
 ### 禁止事項
-- 既存 localStorage キーの直接削除（妻の端末でデータ消失する）
+- **expand-contract プロトコル外**での既存 localStorage キーの直接削除（妻の端末でデータ消失する）
+  - 上記「デプロイ戦略 4. contract」の前提条件を全て満たした場合のみ削除可。それ以外は禁止
 - 互換性を欠く JSON スキーマでのバックアップファイル生成（過去ファイルからの復元が壊れる）
 - スキーマレジストリ等の外部サービス依存（完全ローカル原則違反）
