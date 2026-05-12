@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeCheerDates } from "../src/lib/cheer";
+import { CHEER_AUTO_LINE_COUNT, computeCheerDates, isEmptyDay } from "../src/lib/cheer";
 import type { DayMeals } from "../src/types";
 
 const TODAY = "2026-04-16";
@@ -13,6 +13,51 @@ function filled(text = "x"): DayMeals {
 function emptyOneLine(): DayMeals {
   return { lines: [{ text: "", done: false }] };
 }
+
+// 自動生成された 4 空行を持つ DayMeals を作る
+function autoEmpty(): DayMeals {
+  return {
+    lines: Array.from({ length: CHEER_AUTO_LINE_COUNT }, () => ({ text: "", done: false })),
+  };
+}
+
+describe("isEmptyDay", () => {
+  it("undefined は空日扱い", () => {
+    expect(isEmptyDay(undefined)).toBe(true);
+  });
+
+  it("lines 0 個は空日扱い", () => {
+    expect(isEmptyDay({ lines: [] })).toBe(true);
+  });
+
+  it("1 行で text=='' は空日扱い", () => {
+    expect(isEmptyDay(emptyOneLine())).toBe(true);
+  });
+
+  it("4 行すべて text=='' は空日扱い（起動時自動生成された日）", () => {
+    expect(isEmptyDay(autoEmpty())).toBe(true);
+  });
+
+  it("1 行でも text 非空なら空日ではない", () => {
+    expect(isEmptyDay(filled())).toBe(false);
+  });
+
+  it("4 行中 1 行だけ text 入りでも空日ではない", () => {
+    const day: DayMeals = {
+      lines: [
+        { text: "", done: false },
+        { text: "カレー", done: false },
+        { text: "", done: false },
+        { text: "", done: false },
+      ],
+    };
+    expect(isEmptyDay(day)).toBe(false);
+  });
+
+  it("memo があっても lines が全て空なら空日扱い（memo は判定対象外）", () => {
+    expect(isEmptyDay({ lines: [], memo: "外食" })).toBe(true);
+  });
+});
 
 describe("computeCheerDates", () => {
   it("meals が空なら today から 7 日間すべてが対象", () => {
@@ -100,6 +145,20 @@ describe("computeCheerDates", () => {
     expect(result.has("2026-04-10")).toBe(false);
     expect(result.has("2026-04-15")).toBe(false);
     expect(result.size).toBe(0);
+  });
+
+  it("ウィンドウ内に自動生成された 4 空行の日があれば空日扱い（拡張定義）", () => {
+    const meals: Record<string, DayMeals> = {
+      "2026-04-16": autoEmpty(), // today、自動生成 4 空行
+      "2026-04-17": filled(),
+      "2026-04-18": filled(),
+      "2026-04-19": filled(),
+      "2026-04-20": filled(),
+      "2026-04-21": filled(),
+      "2026-04-22": filled(),
+    };
+    const result = computeCheerDates(meals, TODAY);
+    expect(Array.from(result)).toEqual(["2026-04-16"]);
   });
 
   it("ウィンドウ全日埋まっていれば空 Set", () => {

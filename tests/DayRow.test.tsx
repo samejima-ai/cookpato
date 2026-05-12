@@ -44,6 +44,7 @@ function baseProps() {
     onToggleCart: () => {},
     onDeleteLine: () => {},
     onMemoChange: () => {},
+    onAddLine: () => {},
   };
 }
 
@@ -460,6 +461,64 @@ describe("DayRow", () => {
       expect(onTextChange).toHaveBeenCalledTimes(2);
       expect(onTextChange).toHaveBeenNthCalledWith(1, "タ");
       expect(onTextChange).toHaveBeenNthCalledWith(2, "タa");
+    });
+  });
+
+  describe("シマエナガ（cheer）の配置と装飾性", () => {
+    it("showCheer=true のとき日付列内に cheer 画像が表示される", () => {
+      const { container } = render(<DayRow {...baseProps()} showCheer />);
+      const cheer = container.querySelector("img.animate-cheer-flip") as HTMLImageElement | null;
+      expect(cheer).toBeTruthy();
+      // 日付列（w-24）の中にいる
+      const dateColumn = container.querySelector(".w-24");
+      expect(dateColumn?.contains(cheer)).toBe(true);
+    });
+
+    it("showCheer=false のとき cheer 画像は描画されない", () => {
+      const { container } = render(<DayRow {...baseProps()} showCheer={false} />);
+      expect(container.querySelector("img.animate-cheer-flip")).toBeNull();
+    });
+
+    it("cheer 画像はタップ無効（pointer-events-none）で装飾扱い（aria-hidden）", () => {
+      const { container } = render(<DayRow {...baseProps()} showCheer />);
+      const cheer = container.querySelector("img.animate-cheer-flip") as HTMLImageElement | null;
+      expect(cheer).toBeTruthy();
+      expect(cheer?.className).toMatch(/pointer-events-none/);
+      expect(cheer?.getAttribute("aria-hidden")).toBe("true");
+    });
+
+    it("献立エリア（trigger 内）には cheer 画像が含まれない（撤去確認）", () => {
+      render(<DayRow {...baseProps()} showCheer />);
+      const trigger = screen.getByLabelText(/4月15日.*献立を編集/);
+      expect(trigger.querySelector("img.animate-cheer-flip")).toBeNull();
+    });
+  });
+
+  describe("「＋追加」ボタン（行末常設）", () => {
+    it("表示モードで＋追加ボタンが描画される", () => {
+      render(<DayRow {...baseProps()} day={makeDay([{ text: "カレー" }])} />);
+      expect(screen.getByRole("button", { name: "行を追加" })).toBeTruthy();
+    });
+
+    it("空日でも＋追加ボタンが描画される", () => {
+      render(<DayRow {...baseProps()} />);
+      expect(screen.getByRole("button", { name: "行を追加" })).toBeTruthy();
+    });
+
+    it("クリックで onAddLine が呼ばれ、編集モードに進入する（textarea 出現）", () => {
+      const onAddLine = vi.fn();
+      render(<DayRow {...baseProps()} onAddLine={onAddLine} />);
+      fireEvent.click(screen.getByRole("button", { name: "行を追加" }));
+      expect(onAddLine).toHaveBeenCalledTimes(1);
+      const textarea = screen.queryAllByRole("textbox").find((el) => el.tagName === "TEXTAREA");
+      expect(textarea).toBeTruthy();
+    });
+
+    it("＋追加ボタンクリックは親の編集トリガーへ漏れず、onAddLine が 1 回だけ呼ばれる", () => {
+      const onAddLine = vi.fn();
+      render(<DayRow {...baseProps()} onAddLine={onAddLine} />);
+      fireEvent.click(screen.getByRole("button", { name: "行を追加" }));
+      expect(onAddLine).toHaveBeenCalledTimes(1);
     });
   });
 

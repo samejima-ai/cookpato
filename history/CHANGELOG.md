@@ -6,7 +6,7 @@
 - `history/` ディレクトリを最小骨格で初期化（SUMMARY.md / INTENT.md / CHANGELOG.md / REGIME-LOG.md）
 - INTENT.md に既存機能 F001〜F010 の意図・条件根拠・却下案を遡及記録
 - REGIME.md に「権限委譲設定」セクション追加（L0-3 昇格、Layer 0 対話で明示同意）
-- REGIME.md に「推奨モデル提示」セクション追加（M1 標準推奨内、乖離なし）
+- REGIME.md に「推奨モデル提示」セクション追加（Opus 4.7 単一は M1 推奨/許容帯から外れ過剰品質帯、乖離あり・コスト面のみ影響でユーザー許容済み）
 - REGIME.md に「履歴更新承認設定」セクション追加（レベル A/B/C 区分）
 - SPEC.md に「データモデル進化」セクション追加（既存の互換性記述を `schema-evolution.md` フォーマットに整理）
 
