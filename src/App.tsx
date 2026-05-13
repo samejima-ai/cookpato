@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import { BackupBanner } from "./components/BackupBanner";
+import { BackupBadge } from "./components/BackupBadge";
 import { BackupRestore } from "./components/BackupRestore";
 import { Calendar } from "./components/Calendar";
 import { FloatingEditor } from "./components/FloatingEditor";
-import { RestoreToast } from "./components/RestoreToast";
 import { SearchBar } from "./components/SearchBar";
 import { SearchResults } from "./components/SearchResults";
 import { StockList } from "./components/StockList";
@@ -129,11 +128,10 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-full max-w-xl mx-auto">
+      {backup.showBanner && (
+        <BackupBadge onSave={backup.exportFile} onComplete={backup.markExported} />
+      )}
       <header className="relative shrink-0 safe-top">
-        {api.restoredFromBackup && <RestoreToast onDismiss={api.clearRestoredFlag} />}
-        {backup.showBanner && (
-          <BackupBanner onSave={backup.exportNow} onDismiss={backup.dismissBanner} />
-        )}
         <SearchBar
           value={query}
           onChange={setQuery}

@@ -70,12 +70,12 @@ describe("shouldShowExportBanner", () => {
     expect(shouldShowExportBanner(null, "2026-05-05")).toBe(true);
   });
 
-  it("7 日経過していれば表示", () => {
-    expect(shouldShowExportBanner("2026-04-28", "2026-05-05")).toBe(true);
+  it("30 日経過していれば表示", () => {
+    expect(shouldShowExportBanner("2026-04-05", "2026-05-05")).toBe(true);
   });
 
-  it("7 日未満なら非表示", () => {
-    expect(shouldShowExportBanner("2026-04-29", "2026-05-05")).toBe(false);
+  it("30 日未満なら非表示", () => {
+    expect(shouldShowExportBanner("2026-04-06", "2026-05-05")).toBe(false);
   });
 
   it("同日（0 日差）なら非表示", () => {
