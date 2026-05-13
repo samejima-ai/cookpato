@@ -2,16 +2,22 @@
  * バックアップ書き出しを促す「シマエナガ」のフローティングバッジ。
  *
  * 通常サイクル：
- * - 画面上部中央に長めのランダム間隔で出現する（30〜120s）
- * - 左右どちらかから滑り込み、数秒 perch（停留）した後に反対側へ滑り抜けて消える
- * - 次回サイクルは出口だった側から進入する（ジグザグに飛んでくる）
+ * - 長めのランダム間隔（30〜120s）の後、画面外から歩行開始
+ * - 上部をゆっくり歩くペース（約 10s で画面横断、linear）で通過する
+ * - 歩行中は上下に「ふわふわ」揺れる（CSS keyframe、約 1.8s 周期）
+ * - 通過後は次サイクル準備で待機（leftToRight 反転、次は反対側から進入）
  *
  * タップ時：
- * - バッジを現在位置で凍結（mid-animation でも） + onSave 呼び出しでファイル書き出し発火
- * - 約 450ms の「処理中」演出 perch を挟む
- * - その後 boost モード（通常の約 3.3 倍速）で残り phase をスキップして反対側へ離脱
- *   「歩く → 全速力で走る」のスピード感ギャップを transition duration の差（500→150ms）で表現
- * - 離脱完了で onComplete を呼ぶ（lastExport 更新等の最終化に使う）
+ * - 現位置で停止（揺れも止まる）＋ onSave 発火（ファイル書き出し）
+ * - 約 450ms「処理中」演出 perch を挟む
+ * - boost モード（transition 300ms ease-in、歩行の十数倍速）で残り距離を一気に走り抜ける
+ *   「歩く → 全速力で走る」のスピード感ギャップを transition の差で表現
+ * - 離脱完了で onComplete を呼ぶ（lastExport 記録、badge unmount）
+ *
+ * 二層構造：
+ * - 外側 div: translateX で水平スライド（歩行）
+ * - 内側 button: translateY で wobble（揺れ）
+ * - 両 transform を別要素で合成し、互いに干渉しないようにする
  *
  * 画面遷移を伴わず、入力やスクロールを阻害しないように pointer-events を制御する。
  */
@@ -25,42 +31,38 @@ type Props = {
   onComplete: () => void;
 };
 
-type Phase = "hidden" | "in" | "perch" | "out";
-/** 動作モード：normal=通常 / paused=タップで停止中 / boost=バックアップ完了後の高速離脱 */
+type Phase = "hidden" | "walking";
+/** 動作モード：normal=通常歩行 / paused=タップで停止中 / boost=バックアップ完了後の高速離脱 */
 type Mode = "normal" | "paused" | "boost";
 
-/**
- * 各 phase の dwell 時間（ms）。CSS transition 時間と一致させて、out → hidden で
- * transition-none に切り替わる際に位置がスナップしないようにする。
- * - normal: in/out 500ms（= duration-500）、perch 5s
- * - boost:  in/out 150ms（= duration-150）。perch はスキップする（残り phase 直行）
- */
-function phaseDurationMs(phase: Phase, mode: Mode): number {
-  if (phase === "hidden") return 30_000 + Math.floor(Math.random() * 90_000);
-  if (mode === "boost") return 150;
-  return phase === "perch" ? 5_000 : 500;
-}
-
-const NEXT_PHASE: Record<Phase, Phase> = {
-  hidden: "in",
-  in: "perch",
-  perch: "out",
-  out: "hidden",
-};
-
-/** タップ → ファイル書き出し発火 → 離脱開始までの「処理中」を演出する停止時間（ms） */
+/** 駐機・往復で使う off-screen 位置（vw 単位）。viewport center 基準で十分にはみ出る値 */
+const OFFSCREEN_VW = 60;
+/** 通常歩行の所要時間（ms）。off-left → off-right を linear に進む */
+const WALK_DURATION_MS = 10_000;
+/** boost 離脱の transition 時間（ms）。歩行との比は約 33 倍、「全速力で走る」感を演出 */
+const BOOST_DURATION_MS = 300;
+/** タップ → ファイル書き出し → 離脱開始までの「処理中」 perch（ms） */
 const PROCESSING_PAUSE_MS = 450;
+/** 出現間隔のランダム範囲（ms）：30〜120 秒 */
+const HIDDEN_MIN_MS = 30_000;
+const HIDDEN_RAND_RANGE_MS = 90_000;
+
+function phaseDurationMs(phase: Phase, mode: Mode): number {
+  if (phase === "hidden") return HIDDEN_MIN_MS + Math.floor(Math.random() * HIDDEN_RAND_RANGE_MS);
+  // walking: 通常は WALK_DURATION_MS、boost 時は BOOST_DURATION_MS
+  return mode === "boost" ? BOOST_DURATION_MS : WALK_DURATION_MS;
+}
 
 export function BackupBadge({ onSave, onComplete }: Props) {
   const [phase, setPhase] = useState<Phase>("hidden");
-  // true: 左から進入し右へ抜ける / false: 右から進入し左へ抜ける。サイクル毎に反転
+  // true: 左から右へ歩行 / false: 右から左へ歩行。サイクル毎に反転
   const [leftToRight, setLeftToRight] = useState<boolean>(() => Math.random() < 0.5);
   const [mode, setMode] = useState<Mode>("normal");
-  /** タップ時の現在 transform 値をスナップショットして mid-animation 位置で固定する（解放時 null） */
+  /** タップ時の現在 transform 値を実 DOM から読んで固定する（解放時 null） */
   const [frozenTransform, setFrozenTransform] = useState<string | null>(null);
-  const buttonRef = useRef<HTMLButtonElement>(null);
+  const slideRef = useRef<HTMLDivElement>(null);
   const pauseTimerRef = useRef<number | null>(null);
-  // onComplete は深い依存に巻き込まないよう ref 経由で読む
+  // onComplete は phase 駆動 useEffect の依存に巻き込まないよう ref 経由で読む
   const onCompleteRef = useRef(onComplete);
   useEffect(() => {
     onCompleteRef.current = onComplete;
@@ -71,15 +73,19 @@ export function BackupBadge({ onSave, onComplete }: Props) {
     if (mode === "paused") return;
     const ms = phaseDurationMs(phase, mode);
     const t = window.setTimeout(() => {
-      if (phase === "out") {
+      if (phase === "walking") {
+        // 歩行完了 → 次サイクル準備（出口側 = 次の進入側のため leftToRight 反転）
         setLeftToRight((v) => !v);
-        // boost 離脱が完了 → 通常モードに戻り、親に完了通知
         if (mode === "boost") {
+          // boost 離脱が完了 → 通常モードに戻り、親に完了通知
           setMode("normal");
           onCompleteRef.current();
         }
+        setPhase("hidden");
+      } else {
+        // hidden の待機完了 → 歩行開始
+        setPhase("walking");
       }
-      setPhase(NEXT_PHASE[phase]);
     }, ms);
     return () => window.clearTimeout(t);
   }, [phase, mode]);
@@ -92,11 +98,11 @@ export function BackupBadge({ onSave, onComplete }: Props) {
   }, []);
 
   function handleTap() {
-    // hidden / paused / boost 中は再タップ無効（normal な in/perch/out のみ反応）
-    if (mode !== "normal" || phase === "hidden") return;
+    // hidden / paused / boost 中は再タップ無効（normal な walking のみ反応）
+    if (mode !== "normal" || phase !== "walking") return;
 
-    // 現在の transform を実 DOM から読んで凍結（mid-animation 位置を維持）
-    const node = buttonRef.current;
+    // 現在の transform を実 DOM から読んで凍結（mid-walk 位置を維持）
+    const node = slideRef.current;
     if (node) {
       const t = getComputedStyle(node).transform;
       setFrozenTransform(t && t !== "none" ? t : "translateX(0)");
@@ -106,45 +112,58 @@ export function BackupBadge({ onSave, onComplete }: Props) {
     // ファイル書き出しを同期発火（OS ダイアログまで誘導される）
     onSave();
 
-    // 一定時間 perch（「処理中」演出）した後、boost 速度で離脱
+    // 一定時間「処理中」演出 perch → boost で離脱
     pauseTimerRef.current = window.setTimeout(() => {
       pauseTimerRef.current = null;
       setFrozenTransform(null);
       setMode("boost");
-      // 残り phase をスキップして直接 out（離脱）へ。startled で bolt out するイメージ
-      setPhase("out");
+      // phase は walking のまま。transition 時間が boost 用に切り替わり、残り距離を一気に走る
     }, PROCESSING_PAUSE_MS);
   }
 
-  let translate: string;
-  if (phase === "hidden") translate = leftToRight ? "-100vw" : "100vw";
-  else if (phase === "in" || phase === "perch") translate = "0";
-  else translate = leftToRight ? "100vw" : "-100vw";
+  // 水平スライドの translateX：
+  // - hidden: 待機側（次サイクルの進入側）に駐機
+  // - walking/boost: 出口側へ向かう（leftToRight=true なら +OFFSCREEN_VW、false なら -OFFSCREEN_VW）
+  const targetVw = leftToRight ? OFFSCREEN_VW : -OFFSCREEN_VW;
+  const parkedVw = leftToRight ? -OFFSCREEN_VW : OFFSCREEN_VW;
+  const translateVw = phase === "hidden" ? parkedVw : targetVw;
+  const transformStyle = frozenTransform ?? `translateX(${translateVw}vw)`;
 
-  let transitionClass: string;
-  if (mode === "paused" || phase === "hidden") transitionClass = "transition-none";
-  else if (mode === "boost") transitionClass = "transition-transform duration-150 ease-in";
-  else transitionClass = "transition-transform duration-500 ease-out";
+  // CSS transition：paused は none で固定、boost は短時間 ease-in、それ以外は linear で walking 速度
+  let transitionStyle: string;
+  if (mode === "paused") transitionStyle = "none";
+  else if (mode === "boost") transitionStyle = `transform ${BOOST_DURATION_MS}ms ease-in`;
+  else transitionStyle = `transform ${WALK_DURATION_MS}ms linear`;
 
-  const transformStyle = frozenTransform ?? `translateX(${translate})`;
+  // 上下の「ふわふわ」揺れ：normal な walking でのみ作動。paused は中間フレームで停止、boost は揺れなし
+  let wobbleClass: string;
+  if (mode === "normal" && phase === "walking") wobbleClass = "animate-shimaenaga-float";
+  else if (mode === "paused")
+    wobbleClass = "animate-shimaenaga-float animate-shimaenaga-float-paused";
+  else wobbleClass = "";
+
   const isHidden = phase === "hidden";
 
   return (
     <div className="pointer-events-none fixed inset-x-0 top-0 z-40 flex justify-center safe-top">
-      <button
-        ref={buttonRef}
-        type="button"
-        onClick={handleTap}
-        aria-label="バックアップを保存"
-        // hidden 中はオフスクリーンに居るがフォーカス可能要素として DOM に残るため、
-        // a11y ツリーから除外しキーボード Tab でも到達不能にする
-        aria-hidden={isHidden || undefined}
-        tabIndex={isHidden ? -1 : undefined}
-        className={`pointer-events-auto mt-2 w-12 h-12 flex items-center justify-center ${transitionClass}`}
-        style={{ transform: transformStyle }}
+      <div
+        ref={slideRef}
+        className="mt-2"
+        style={{ transform: transformStyle, transition: transitionStyle }}
       >
-        <img src={shimaenagaImg} alt="" className="w-12 h-12 select-none" draggable={false} />
-      </button>
+        <button
+          type="button"
+          onClick={handleTap}
+          aria-label="バックアップを保存"
+          // hidden 中はオフスクリーンに居るがフォーカス可能要素として DOM に残るため、
+          // a11y ツリーから除外しキーボード Tab でも到達不能にする
+          aria-hidden={isHidden || undefined}
+          tabIndex={isHidden ? -1 : undefined}
+          className={`pointer-events-auto w-12 h-12 flex items-center justify-center ${wobbleClass}`}
+        >
+          <img src={shimaenagaImg} alt="" className="w-12 h-12 select-none" draggable={false} />
+        </button>
+      </div>
     </div>
   );
 }

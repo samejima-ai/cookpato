@@ -105,3 +105,21 @@ input[type="search"] {
 .animate-slide-down {
   animation: slide-down 200ms ease-out;
 }
+
+/* バックアップ催促バッジ：歩行中の上下「ふわふわ」揺れ（約 1.8s 周期、振幅 4px） */
+@keyframes shimaenaga-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+.animate-shimaenaga-float {
+  animation: shimaenaga-float 1.8s ease-in-out infinite;
+}
+/* paused 時：揺れを途中フレームで停止（タップ凍結時に使う） */
+.animate-shimaenaga-float-paused {
+  animation-play-state: paused;
+}
