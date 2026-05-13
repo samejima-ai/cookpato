@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import weekCompleteImg from "../assets/week-complete.png";
 import weekMedalImg from "../assets/week-medal.png";
 import type { AppDataApi } from "../hooks/useAppData";
-import { computeCheerDates } from "../lib/cheer";
+import { computeCheerDates, computeCheerWindow } from "../lib/cheer";
 import { addDaysKey, formatMonthHeader, isFirstOfMonth, isSameMonth, todayKey } from "../lib/date";
 import type { DateKey } from "../types";
 import { DayRow } from "./DayRow";
@@ -52,6 +52,8 @@ export function Calendar({ api, scrollTarget, onActiveQueryChange }: Props) {
     () => computeCheerDates(api.data.meals, today),
     [api.data.meals, today],
   );
+  // 今日を含む 7 日間の範囲（入力状態に依存しない）。空行★プレースホルダ表示判定に使う。
+  const cheerWindow = useMemo(() => computeCheerWindow(today), [today]);
 
   // お気に入りは正規化テキスト集合として保持されているので Set に変換して渡す
   const favoriteKeys = useMemo(() => new Set(api.data.favorites), [api.data.favorites]);
@@ -193,6 +195,7 @@ export function Calendar({ api, scrollTarget, onActiveQueryChange }: Props) {
                   day={api.data.meals[date]}
                   isToday={date === today}
                   showCheer={cheerDates.has(date)}
+                  inCheerWindow={cheerWindow.has(date)}
                   favoriteKeys={favoriteKeys}
                   onTextChange={(text) => api.setMealsText(date, text)}
                   onToggleLine={(i) => api.toggleLine(date, i)}

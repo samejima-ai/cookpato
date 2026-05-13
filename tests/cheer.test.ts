@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { CHEER_AUTO_LINE_COUNT, computeCheerDates, isEmptyDay } from "../src/lib/cheer";
+import {
+  CHEER_AUTO_LINE_COUNT,
+  computeCheerDates,
+  computeCheerWindow,
+  isEmptyDay,
+} from "../src/lib/cheer";
 import type { DayMeals } from "../src/types";
 
 const TODAY = "2026-04-16";
@@ -161,7 +166,7 @@ describe("computeCheerDates", () => {
     expect(Array.from(result)).toEqual(["2026-04-16"]);
   });
 
-  it("ウィンドウ全日埋まっていれば空 Set", () => {
+  it("ウィンドウ全日埋まっていれば空 Set（入力状態に依存する）", () => {
     const meals: Record<string, DayMeals> = {
       "2026-04-16": filled(),
       "2026-04-17": filled(),
@@ -173,5 +178,24 @@ describe("computeCheerDates", () => {
     };
     const result = computeCheerDates(meals, TODAY);
     expect(result.size).toBe(0);
+  });
+});
+
+describe("computeCheerWindow", () => {
+  it("today から 7 日分の DateKey を返す（入力状態に依存しない）", () => {
+    const result = computeCheerWindow(TODAY);
+    expect(result.size).toBe(7);
+    expect(result.has("2026-04-16")).toBe(true); // today
+    expect(result.has("2026-04-17")).toBe(true);
+    expect(result.has("2026-04-22")).toBe(true); // today+6
+    expect(result.has("2026-04-23")).toBe(false); // today+7 は対象外
+    expect(result.has("2026-04-15")).toBe(false); // 昨日は対象外
+  });
+
+  it("meals 引数を取らないため、部分入力でも範囲は変わらない", () => {
+    // computeCheerDates は meals 依存で「全空日」のみだが、computeCheerWindow は範囲のみ。
+    // 1 行入力された日も範囲内であれば結果に含まれる。
+    const result = computeCheerWindow(TODAY);
+    expect(result.has("2026-04-16")).toBe(true);
   });
 });
