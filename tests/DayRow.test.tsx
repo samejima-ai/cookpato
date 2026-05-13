@@ -494,6 +494,62 @@ describe("DayRow", () => {
     });
   });
 
+  describe("空行の★プレースホルダ（シマエナガ発生日）", () => {
+    function emptyLines(count: number): DayMeals {
+      return {
+        lines: Array.from({ length: count }, () => ({ text: "", done: false })),
+      };
+    }
+
+    it("showCheer=true の日は空行ごとに★が描画される（自動生成された 4 空行）", () => {
+      const { container } = render(<DayRow {...baseProps()} showCheer day={emptyLines(4)} />);
+      // ★ が 4 つ表示される
+      const stars = Array.from(container.querySelectorAll("li > span")).filter(
+        (el) => el.textContent === "★",
+      );
+      expect(stars).toHaveLength(4);
+    });
+
+    it("showCheer=false の日は空行を描画しない（過去日・today+7 以降）", () => {
+      const { container } = render(
+        <DayRow {...baseProps()} showCheer={false} day={emptyLines(4)} />,
+      );
+      const stars = Array.from(container.querySelectorAll("li > span")).filter(
+        (el) => el.textContent === "★",
+      );
+      expect(stars).toHaveLength(0);
+    });
+
+    it("入力済み行は LineItem（チェックボックス + 料理名）、空行は★で混在描画される", () => {
+      const day: DayMeals = {
+        lines: [
+          { text: "カレー", done: false },
+          { text: "", done: false },
+          { text: "サラダ", done: false },
+          { text: "", done: false },
+        ],
+      };
+      const { container } = render(<DayRow {...baseProps()} showCheer day={day} />);
+      // チェックボックスを持つ完了ボタンが 2 つ
+      const checkButtons = screen.getAllByRole("button", { name: /完了にする/ });
+      expect(checkButtons).toHaveLength(2);
+      // ★ が 2 つ
+      const stars = Array.from(container.querySelectorAll("li > span")).filter(
+        (el) => el.textContent === "★",
+      );
+      expect(stars).toHaveLength(2);
+    });
+
+    it("★行はクリックすると親トリガー経由で編集モードに入る", () => {
+      const { container } = render(<DayRow {...baseProps()} showCheer day={emptyLines(2)} />);
+      const trigger = screen.getByLabelText(/4月15日.*献立を編集/);
+      const star = container.querySelector("li > span") as HTMLElement | null;
+      expect(star?.textContent).toBe("★");
+      // 親トリガーに包含されている
+      expect(trigger.contains(star)).toBe(true);
+    });
+  });
+
   describe("「＋追加」ボタン（行末常設）", () => {
     it("表示モードで＋追加ボタンが描画される", () => {
       render(<DayRow {...baseProps()} day={makeDay([{ text: "カレー" }])} />);

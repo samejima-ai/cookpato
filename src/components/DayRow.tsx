@@ -216,8 +216,29 @@ export function DayRow({
             aria-label={`${formatDayLabel(dateKey)} の献立を編集`}
           >
             <ul>
-              {lines.map((line, idx) =>
-                line.text === "" ? null : (
+              {lines.map((line, idx) => {
+                if (line.text === "") {
+                  // 空行：showCheer=true の日（today〜today+6 の空日）にだけ ★ プレースホルダを描画。
+                  // タップは親 <div role="button"> が拾って textarea 編集モードへ進入。
+                  // テキストが入力確定されると line.text!=="" となり、自然にチェックボックス行へ変わる。
+                  if (!showCheer) return null;
+                  return (
+                    <li
+                      // biome-ignore lint/suspicious/noArrayIndexKey: 行の並べ替えはせず、追加・削除のみなので index をキーにしてよい
+                      key={`${dateKey}-${idx}-empty`}
+                      className="flex items-stretch min-h-11 rounded"
+                    >
+                      <span
+                        aria-hidden="true"
+                        className="w-11 flex items-center justify-center text-yellow-300 text-lg"
+                      >
+                        ★
+                      </span>
+                      <span className="sr-only">未入力の行</span>
+                    </li>
+                  );
+                }
+                return (
                   <LineItem
                     // biome-ignore lint/suspicious/noArrayIndexKey: 行の並べ替えはせず、追加・削除のみなので index をキーにしてよい（SPEC.md 準拠）
                     key={`${dateKey}-${idx}`}
@@ -236,8 +257,8 @@ export function DayRow({
                       setPendingDelete(idx);
                     }}
                   />
-                ),
-              )}
+                );
+              })}
             </ul>
             {/* 「＋追加」ボタン：行末常設。空 Line を 1 つ append して編集モードへ。
                 親 <div role="button"> の編集モード進入と分けるため stopPropagation。 */}
