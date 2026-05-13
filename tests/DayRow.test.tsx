@@ -37,6 +37,7 @@ function baseProps() {
     day: undefined as DayMeals | undefined,
     isToday: false,
     showCheer: false,
+    inCheerWindow: false,
     favoriteKeys: new Set<string>(),
     onTextChange: () => {},
     onToggleLine: () => {},
@@ -491,6 +492,67 @@ describe("DayRow", () => {
       render(<DayRow {...baseProps()} showCheer />);
       const trigger = screen.getByLabelText(/4月15日.*献立を編集/);
       expect(trigger.querySelector("img.animate-cheer-flip")).toBeNull();
+    });
+  });
+
+  describe("空行の★プレースホルダ（シマエナガ発生日）", () => {
+    function emptyLines(count: number): DayMeals {
+      return {
+        lines: Array.from({ length: count }, () => ({ text: "", done: false })),
+      };
+    }
+
+    function countStars(container: HTMLElement): number {
+      return Array.from(container.querySelectorAll("li > span")).filter(
+        (el) => el.textContent === "★",
+      ).length;
+    }
+
+    it("inCheerWindow=true の日は空行ごとに★が描画される（自動生成 4 空行）", () => {
+      const { container } = render(<DayRow {...baseProps()} inCheerWindow day={emptyLines(4)} />);
+      expect(countStars(container)).toBe(4);
+    });
+
+    it("inCheerWindow=false の日は空行を描画しない（過去日・today+7 以降）", () => {
+      const { container } = render(
+        <DayRow {...baseProps()} inCheerWindow={false} day={emptyLines(4)} />,
+      );
+      expect(countStars(container)).toBe(0);
+    });
+
+    it("1 行入力後の混在状態でも残りの空行に★が継続描画される（showCheer=false でも inCheerWindow=true なら描画）", () => {
+      // 実アプリ状態：1 行入力済み → isEmptyDay=false → showCheer=false。
+      // ただし inCheerWindow（範囲のみ判定）は true のまま。残り空行に★が出続けることを検証。
+      const day: DayMeals = {
+        lines: [
+          { text: "カレー", done: false },
+          { text: "", done: false },
+          { text: "サラダ", done: false },
+          { text: "", done: false },
+        ],
+      };
+      const { container } = render(
+        <DayRow {...baseProps()} showCheer={false} inCheerWindow day={day} />,
+      );
+      // 入力済み行 2 → LineItem の「完了にする」ボタンが 2 個
+      const checkButtons = screen.getAllByRole("button", { name: /完了にする/ });
+      expect(checkButtons).toHaveLength(2);
+      // 空行 2 → ★ 2 個
+      expect(countStars(container)).toBe(2);
+    });
+
+    it("★行クリックで textarea 編集モードに入る（親トリガー経由）", () => {
+      const { container } = render(<DayRow {...baseProps()} inCheerWindow day={emptyLines(2)} />);
+      const star = container.querySelector("li > span") as HTMLElement | null;
+      expect(star?.textContent).toBe("★");
+      // 編集モード進入前は textarea は存在しない
+      expect(
+        screen.queryAllByRole("textbox").find((el) => el.tagName === "TEXTAREA"),
+      ).toBeUndefined();
+      // ★行（の親 <li>）をクリック → 親 <div role="button"> へバブリングして編集モード進入
+      fireEvent.click(star as HTMLElement);
+      const textarea = screen.queryAllByRole("textbox").find((el) => el.tagName === "TEXTAREA");
+      expect(textarea).toBeTruthy();
     });
   });
 

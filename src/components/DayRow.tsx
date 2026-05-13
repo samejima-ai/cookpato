@@ -17,6 +17,12 @@ type Props = {
   isToday: boolean;
   /** 未来の空日ウィンドウに含まれる日か（SPEC「空状態の応援表示」） */
   showCheer: boolean;
+  /**
+   * today〜today+6 の範囲内か（入力状態に依存しない）。
+   * 空行★プレースホルダ表示判定に使う。部分入力後の残り空行にも★を出すため
+   * showCheer（全行空時のみ true）とは別の prop に分離する。
+   */
+  inCheerWindow: boolean;
   /** お気に入り判定用の正規化済みキー集合 */
   favoriteKeys: Set<string>;
   onTextChange: (text: string) => void;
@@ -46,6 +52,7 @@ export function DayRow({
   day,
   isToday,
   showCheer,
+  inCheerWindow,
   favoriteKeys,
   onTextChange,
   onToggleLine,
@@ -216,8 +223,34 @@ export function DayRow({
             aria-label={`${formatDayLabel(dateKey)} の献立を編集`}
           >
             <ul>
-              {lines.map((line, idx) =>
-                line.text === "" ? null : (
+              {lines.map((line, idx) => {
+                if (line.text === "") {
+                  // 空行：today〜today+6 の範囲内（inCheerWindow）でのみ ★ プレースホルダを描画。
+                  // showCheer（全行空時のみ true）ではなく inCheerWindow を使うことで、
+                  // 1 行入力後に残った空行にも★が継続表示される（混在表示）。
+                  // 左端カラム（w-11）に★を置き、右側は LineItem と同様にテキスト用 flex-1 を確保。
+                  // タップは親 <div role="button"> が拾って textarea 編集モードへ進入し、
+                  // 入力確定で line.text!=="" となれば自然に LineItem（チェックボックス + 料理名）へ切り替わる。
+                  if (!inCheerWindow) return null;
+                  return (
+                    <li
+                      // biome-ignore lint/suspicious/noArrayIndexKey: 行の並べ替えはせず、追加・削除のみなので index をキーにしてよい
+                      key={`${dateKey}-${idx}-empty`}
+                      className="flex items-stretch min-h-11 rounded"
+                    >
+                      <span
+                        aria-hidden="true"
+                        className="w-11 flex items-center justify-center text-yellow-300 text-lg shrink-0"
+                      >
+                        ★
+                      </span>
+                      <span className="flex-1 min-w-0 self-center text-neutral-300 text-sm pl-1">
+                        <span className="sr-only">未入力の行</span>
+                      </span>
+                    </li>
+                  );
+                }
+                return (
                   <LineItem
                     // biome-ignore lint/suspicious/noArrayIndexKey: 行の並べ替えはせず、追加・削除のみなので index をキーにしてよい（SPEC.md 準拠）
                     key={`${dateKey}-${idx}`}
@@ -236,8 +269,8 @@ export function DayRow({
                       setPendingDelete(idx);
                     }}
                   />
-                ),
-              )}
+                );
+              })}
             </ul>
             {/* 「＋追加」ボタン：行末常設。空 Line を 1 つ append して編集モードへ。
                 親 <div role="button"> の編集モード進入と分けるため stopPropagation。 */}
