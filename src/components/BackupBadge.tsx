@@ -135,10 +135,12 @@ export function BackupBadge({ onSave, onComplete }: Props) {
   else if (mode === "boost") transitionStyle = `transform ${BOOST_DURATION_MS}ms ease-in`;
   else transitionStyle = `transform ${WALK_DURATION_MS}ms linear`;
 
-  // 上下の「ふわふわ」揺れ：normal な walking でのみ作動。paused は中間フレームで停止、boost は揺れなし
+  // 上下の「ふわふわ」揺れ：normal な walking でのみ作動。
+  // paused / boost は中間フレームで停止（boost 中もクラスを保持することで、paused 時の
+  // translateY が 0 にスナップして縦位置がガタつくのを防ぐ）。
   let wobbleClass: string;
   if (mode === "normal" && phase === "walking") wobbleClass = "animate-shimaenaga-float";
-  else if (mode === "paused")
+  else if (mode === "paused" || mode === "boost")
     wobbleClass = "animate-shimaenaga-float animate-shimaenaga-float-paused";
   else wobbleClass = "";
 

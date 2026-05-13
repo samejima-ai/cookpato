@@ -123,3 +123,9 @@ input[type="search"] {
 .animate-shimaenaga-float-paused {
   animation-play-state: paused;
 }
+/* prefers-reduced-motion を尊重して常時揺れを無効化（前庭系への配慮） */
+@media (prefers-reduced-motion: reduce) {
+  .animate-shimaenaga-float {
+    animation: none;
+  }
+}
