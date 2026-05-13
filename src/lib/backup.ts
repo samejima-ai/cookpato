@@ -9,8 +9,8 @@ import type { AppData, DateKey } from "../types";
 import { fromDateKey } from "./date";
 import { coerceAppData, isAppDataEffectivelyEmpty } from "./storage";
 
-/** バックアップ書き出しの推奨間隔（日）。これを超えるとバナーを表示する */
-export const BACKUP_INTERVAL_DAYS = 7;
+/** バックアップ書き出しの推奨間隔（日）。これを超えるとバッジを表示する */
+export const BACKUP_INTERVAL_DAYS = 30;
 
 /**
  * ISO 週番号フォーマット（例：`2026-W18`）。
@@ -66,7 +66,7 @@ export function triggerDownload(filename: string, content: string): void {
 }
 
 /**
- * 最終エクスポート日からの経過日数で B 層バナー表示判定。
+ * 最終エクスポート日からの経過日数でバッジ表示判定。
  * 未エクスポート（null）または BACKUP_INTERVAL_DAYS 日以上経過で true。
  */
 export function shouldShowExportBanner(lastExport: DateKey | null, today: DateKey): boolean {
