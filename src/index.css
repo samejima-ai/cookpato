@@ -90,3 +90,18 @@ input[type="search"] {
   animation: row-wobble 0.28s ease-in-out infinite;
   transform-origin: center;
 }
+
+/* フロート入力フォーム（F011）の出現アニメ：上から slide-down で 200ms */
+@keyframes slide-down {
+  from {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+.animate-slide-down {
+  animation: slide-down 200ms ease-out;
+}

@@ -33,6 +33,13 @@ export type AppDataApi = {
   bulkAddEmptyLines: (dates: DateKey[], count: number) => void;
   /** その日に空 Line を 1 つ append する。「＋追加」ボタンから呼ぶ。 */
   addLineAt: (date: DateKey, position: "end") => void;
+  /**
+   * 指定日の lineIndex 行の text を更新する（フロート入力フォーム F011 から呼ぶ）。
+   * テキスト変更時は done を false にリセット、cart を解除する（textToLines と同じ意味論）。
+   * 同じ text なら no-op（識別子維持）。範囲外 index は no-op。
+   * 全行 text=='' + memo なしになった場合は日付ごと削除する。
+   */
+  updateLineAt: (date: DateKey, lineIndex: number, text: string) => void;
   /** 1日分のちょいメモを更新（即時保存）。空文字は未設定扱い */
   setMemo: (date: DateKey, text: string) => void;
   /** 1日分の完了トグル（行インデックス単位） */
@@ -224,6 +231,30 @@ export function useAppData(): AppDataApi {
         ...prev,
         data: { ...prev.data, meals: { ...prev.data.meals, [date]: nextDay } },
       };
+    });
+  }, []);
+
+  const updateLineAt = useCallback((date: DateKey, lineIndex: number, text: string) => {
+    setState((prev) => {
+      const day = prev.data.meals[date];
+      if (!day) return prev;
+      if (lineIndex < 0 || lineIndex >= day.lines.length) return prev;
+      const current = day.lines[lineIndex];
+      if (!current || current.text === text) return prev;
+      // textToLines と同意味論：テキスト変更時は done リセット、cart 解除
+      const nextLines = day.lines.map((l, i) =>
+        i === lineIndex ? ({ text, done: false } as MealLine) : l,
+      );
+      const isAllEmpty = nextLines.every((l) => l.text === "" && !l.done);
+      const nextMeals = { ...prev.data.meals };
+      if (isAllEmpty && !day.memo) {
+        delete nextMeals[date];
+      } else {
+        const nextDay: DayMeals = { lines: nextLines };
+        if (day.memo) nextDay.memo = day.memo;
+        nextMeals[date] = nextDay;
+      }
+      return { ...prev, data: { ...prev.data, meals: nextMeals } };
     });
   }, []);
 
@@ -449,6 +480,7 @@ export function useAppData(): AppDataApi {
     setMealsText,
     bulkAddEmptyLines,
     addLineAt,
+    updateLineAt,
     setMemo,
     toggleLine,
     deleteLine,

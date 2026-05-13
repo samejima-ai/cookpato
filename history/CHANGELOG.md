@@ -1,5 +1,39 @@
 # 変更履歴
 
+## 2026-05-13 (LC=1 フロート入力フォーム導入サイクル)
+
+### 追加
+- F011 フロート入力フォーム（FloatingEditor）を新規追加（SPEC.md 該当セクション、INTENT.md F011 エントリ）
+- `useAppData` に `updateLineAt(date, lineIndex, text)` API を追加（行単位 text 更新）
+
+### 変更
+- F002 フリー入力の編集導線を改訂：textarea 全行一括編集 → 各行・メモを表示専用化し、タップで F011 フロート入力フォーム起動へ集約
+- SPEC.md「フリー入力」セクション内に「編集導線（2026-05-13 改訂）」サブセクションを追記
+- `DayRow.tsx` の textarea 経路を撤去、行・メモは表示専用 div で描画
+- `MemoField` を表示専用化（タップで親へトリガー、自身は input を保持しない）
+- `App.tsx` に `EditingTarget` state と FloatingEditor を導入
+- 検索ハイライト経路（`onActiveQueryChange`）を FloatingEditor 経由に再配線
+
+### 廃止
+- 旧 textarea ベースの全行一括編集モデル（行ごとの確定経路を確保したいニーズに反していたため）
+
+### 体制
+- 判定: M1 維持（規模スコア S=2、機能数 11 件は 4〜10 帯から外れるが、F011 は F002 の編集経路として一体運用のため再評価で 10 件相当と判定）
+- 事後評価: 妥当（M1 で 3 サイクル運用、layer1-independent-reviewer 不要を維持）
+- REGIME-LOG.md 参照
+
+### 儀式記録（本サイクルの振り返り儀式）
+- レベル: 2（LC=1、機能改訂を伴う対話）
+- スキップ: なし
+- 検出件数: 矛盾 0, 復活要求 0, 再提案 0
+- 動的格上げ／格下げ: なし
+
+### iOS Safari リスク再確認
+- IME × フリック入力 → uncontrolled + 再マウントパターンを FloatingEditor に踏襲（F002 既存対策を流用）
+- virtual keyboard × 上部 sticky フロート → visualViewport API は使わず iOS デフォルト挙動に任せる方針を SPEC.md に明記
+
+---
+
 ## 2026-05-12 (LC=1 メタスキル適用サイクル)
 
 ### 追加

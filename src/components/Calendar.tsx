@@ -4,15 +4,21 @@ import weekMedalImg from "../assets/week-medal.png";
 import type { AppDataApi } from "../hooks/useAppData";
 import { computeCheerDates, computeCheerWindow } from "../lib/cheer";
 import { addDaysKey, formatMonthHeader, isFirstOfMonth, isSameMonth, todayKey } from "../lib/date";
-import type { DateKey } from "../types";
+import type { DateKey, EditingTarget } from "../types";
 import { DayRow } from "./DayRow";
 
 type Props = {
   api: AppDataApi;
   /** スクロールすべき日付。変わるたびに中央に配置する */
   scrollTarget?: DateKey;
-  /** 編集中 DayRow のカーソル行テキストとその日付を親に伝搬する */
-  onActiveQueryChange?: (text: string, date: DateKey) => void;
+  /** 現在フロート編集中の対象（DayRow のハイライト判定用） */
+  editingTarget: EditingTarget | null;
+  /** 行タップで FloatingEditor を起動する */
+  onRequestEditLine: (dateKey: DateKey, lineIndex: number) => void;
+  /** メモタップで FloatingEditor を起動する */
+  onRequestEditMemo: (dateKey: DateKey) => void;
+  /** ＋追加ボタン押下で新規空行追加 + その行を FloatingEditor で編集 */
+  onRequestAddLine: (dateKey: DateKey) => void;
 };
 
 /** 初期表示範囲：±60日 */
@@ -21,7 +27,14 @@ const INITIAL_SPAN = 60;
 const EXTEND_SPAN = 30;
 const TRIGGER_PX = 800;
 
-export function Calendar({ api, scrollTarget, onActiveQueryChange }: Props) {
+export function Calendar({
+  api,
+  scrollTarget,
+  editingTarget,
+  onRequestEditLine,
+  onRequestEditMemo,
+  onRequestAddLine,
+}: Props) {
   const today = todayKey();
   const [range, setRange] = useState(() => ({
     start: addDaysKey(today, -INITIAL_SPAN),
@@ -197,16 +210,19 @@ export function Calendar({ api, scrollTarget, onActiveQueryChange }: Props) {
                   showCheer={cheerDates.has(date)}
                   inCheerWindow={cheerWindow.has(date)}
                   favoriteKeys={favoriteKeys}
-                  onTextChange={(text) => api.setMealsText(date, text)}
+                  editingLineIndex={
+                    editingTarget?.kind === "line" && editingTarget.dateKey === date
+                      ? editingTarget.lineIndex
+                      : null
+                  }
+                  isMemoEditing={editingTarget?.kind === "memo" && editingTarget.dateKey === date}
                   onToggleLine={(i) => api.toggleLine(date, i)}
                   onToggleFavorite={(i) => api.toggleFavorite(date, i)}
                   onToggleCart={(i) => api.toggleCart(date, i)}
                   onDeleteLine={(i) => api.deleteLine(date, i)}
-                  onMemoChange={(text) => api.setMemo(date, text)}
-                  onAddLine={() => api.addLineAt(date, "end")}
-                  onActiveQueryChange={onActiveQueryChange}
-                  onBeginEdit={api.beginMealsEdit}
-                  onCommitEdit={api.commitMealsEdit}
+                  onAddLine={() => onRequestAddLine(date)}
+                  onRequestEditLine={(i) => onRequestEditLine(date, i)}
+                  onRequestEditMemo={() => onRequestEditMemo(date)}
                 />
               </div>
             </div>
