@@ -103,6 +103,31 @@ describe("StockList", () => {
       fireEvent.click(header);
       expect(header.textContent).toContain("▾");
     });
+
+    it("閉時は wrapper に inert 属性が付き、内部要素のキーボード Tab フォーカスを止める", () => {
+      render(<StockList api={makeApi()} />);
+      expect(getWrapper().hasAttribute("inert")).toBe(true);
+    });
+
+    it("開時は wrapper に inert 属性が付かない", () => {
+      render(<StockList api={makeApi()} />);
+      const header = screen.getByRole("button", { name: /ストック/ });
+      fireEvent.click(header);
+      expect(getWrapper().hasAttribute("inert")).toBe(false);
+    });
+
+    it("開いて内部 input にフォーカス中に閉じると、フォーカスはヘッダーへ戻る", () => {
+      render(<StockList api={makeApi()} />);
+      const header = screen.getByRole("button", { name: /ストック/ });
+      fireEvent.click(header);
+      // 内部の追加 input にフォーカスを移す
+      const addInput = screen.getByLabelText(/^ストック名$/) as HTMLInputElement;
+      addInput.focus();
+      expect(document.activeElement).toBe(addInput);
+      // 閉じる：focus がヘッダーへ戻る
+      fireEvent.click(header);
+      expect(document.activeElement).toBe(header);
+    });
   });
 
   describe("名前タップで編集モード進入（pointer 経路）", () => {
