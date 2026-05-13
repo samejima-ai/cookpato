@@ -2,22 +2,15 @@
  * localStorage ラッパー。単一キー "cookpato:data:v1" に AppData を JSON で保存。
  * 読み書きエラーは黙って初期値を返す（単一ユーザー・シンプル運用のため）。
  *
- * バックアップ層：
- * - "cookpato:backup:v1": A 層スナップショット { snapshotDate, data }
- * - "cookpato:lastExport:v1": B 層の最終ファイル書き出し日（DateKey 文字列）
+ * バックアップ：
+ * - "cookpato:lastExport:v1": 最終ファイル書き出し日（DateKey 文字列）
+ *   実体のバックアップは端末内 Files に蓄積される JSON ファイル（媒体外バックアップ）。
  */
 import type { AppData, DateKey, DayMeals, StockItem } from "../types";
 import { computeAllCompleteWeekSundays } from "./week";
 
 const STORAGE_KEY = "cookpato:data:v1";
-const SNAPSHOT_KEY = "cookpato:backup:v1";
 const LAST_EXPORT_KEY = "cookpato:lastExport:v1";
-
-/** A 層スナップショット形式 */
-export type Snapshot = {
-  snapshotDate: DateKey;
-  data: AppData;
-};
 
 function initialData(): AppData {
   return {
@@ -30,7 +23,7 @@ function initialData(): AppData {
 }
 
 /**
- * 任意の入力（JSON.parse 結果やスナップショット data 等）を AppData として安全化する。
+ * 任意の入力（JSON.parse 結果やインポート JSON 等）を AppData として安全化する。
  * 既存の loadData ロジックを切り出してインポート復元でも再利用できるようにしたもの。
  * 不正値は初期値・空配列に寄せて返す（throw しない）。
  */
@@ -82,33 +75,7 @@ export function saveData(data: AppData): void {
   }
 }
 
-/** A 層スナップショットを読む。形式不正なら null を返す */
-export function loadSnapshot(): Snapshot | null {
-  try {
-    const raw = localStorage.getItem(SNAPSHOT_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as unknown;
-    if (typeof parsed !== "object" || parsed === null) return null;
-    const o = parsed as Record<string, unknown>;
-    if (typeof o.snapshotDate !== "string") return null;
-    const data = coerceAppData(o.data);
-    return { snapshotDate: o.snapshotDate, data };
-  } catch {
-    return null;
-  }
-}
-
-/** A 層スナップショットを書く（例外は握りつぶす） */
-export function saveSnapshot(snapshotDate: DateKey, data: AppData): void {
-  try {
-    const payload: Snapshot = { snapshotDate, data };
-    localStorage.setItem(SNAPSHOT_KEY, JSON.stringify(payload));
-  } catch {
-    // 容量不足等で書けなくても運用継続
-  }
-}
-
-/** B 層：最終ファイル書き出し日（DateKey）を読む */
+/** 最終ファイル書き出し日（DateKey）を読む */
 export function loadLastExport(): DateKey | null {
   try {
     const raw = localStorage.getItem(LAST_EXPORT_KEY);
@@ -118,7 +85,7 @@ export function loadLastExport(): DateKey | null {
   }
 }
 
-/** B 層：最終ファイル書き出し日を書く */
+/** 最終ファイル書き出し日を書く */
 export function saveLastExport(date: DateKey): void {
   try {
     localStorage.setItem(LAST_EXPORT_KEY, date);
@@ -135,34 +102,6 @@ export function isAppDataEffectivelyEmpty(data: AppData): boolean {
     data.favorites.length === 0 &&
     data.completedWeeks.length === 0
   );
-}
-
-/**
- * A 層復元込みでデータを読む。
- * プライマリが「実質空」かつスナップショットに有効データがあれば復元してプライマリへ書き戻す。
- * 戻り値の `restored` は復元発火のトースト表示判定に使う。
- */
-export function loadDataWithRecovery(): { data: AppData; restored: boolean } {
-  const primary = loadData();
-  if (!isAppDataEffectivelyEmpty(primary)) {
-    return { data: primary, restored: false };
-  }
-  const snapshot = loadSnapshot();
-  if (!snapshot || isAppDataEffectivelyEmpty(snapshot.data)) {
-    return { data: primary, restored: false };
-  }
-  saveData(snapshot.data);
-  return { data: snapshot.data, restored: true };
-}
-
-/**
- * 1 日 1 回相当のスナップショット更新。
- * 既存スナップショットの snapshotDate が today と異なる場合のみ書き換える。
- */
-export function maybeUpdateSnapshot(today: DateKey, data: AppData): void {
-  const existing = loadSnapshot();
-  if (existing && existing.snapshotDate === today) return;
-  saveSnapshot(today, data);
 }
 
 type BaseShape = {

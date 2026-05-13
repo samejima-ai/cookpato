@@ -1,8 +1,9 @@
 /**
- * バックアップ B 層（週 1 ファイル書き出し + インポート復元）の状態管理 hook。
+ * バックアップ（週 1 ファイル書き出し + インポート復元）の状態管理 hook。
  *
- * - 起動時に lastExport を localStorage から読み、7 日経過でバナー表示
- * - バナー閉じはセッション中だけ（次回起動時に条件を満たせば再表示）
+ * - 起動時に lastExport を localStorage から読み、7 日経過で showBanner=true
+ * - showBanner はシマエナガバッジ（BackupBadge）の出現条件に使う。
+ *   バッジには明示の閉じる操作はなく、書き出し完了で 7 日経過判定が落ちて出なくなる
  * - exportNow: ダウンロード発火 + lastExport 更新（OS ダイアログ可否は検知できないので
  *   クリック発火 = 成功扱い）
  * - importFromText: JSON テキストを検証して AppData として上書き復元
@@ -23,26 +24,20 @@ import type { AppDataApi } from "./useAppData";
 export type ImportResult = { ok: true } | { ok: false; reason: string };
 
 export type UseBackupApi = {
-  /** B 層バナーを表示すべきか（最終書き出しから 7 日経過 + セッション中未 dismiss） */
+  /** バックアップ催促バッジを表示すべきか（最終書き出しから 7 日経過） */
   showBanner: boolean;
   /** 最終ファイル書き出し日（DateKey、未経験は null） */
   lastExport: DateKey | null;
-  /** バナータップ：ファイル書き出しを発火し lastExport を更新 */
+  /** バッジタップ：ファイル書き出しを発火し lastExport を更新 */
   exportNow: () => void;
-  /** バナー閉じる（セッション中のみ。再起動で復活） */
-  dismissBanner: () => void;
   /** インポート復元：AppData として検証 → 成功時に api.restoreData を呼ぶ */
   importFromText: (text: string) => ImportResult;
 };
 
 export function useBackup(api: AppDataApi): UseBackupApi {
   const [lastExport, setLastExport] = useState<DateKey | null>(() => loadLastExport());
-  const [bannerDismissed, setBannerDismissed] = useState(false);
 
-  const showBanner = useMemo(() => {
-    if (bannerDismissed) return false;
-    return shouldShowExportBanner(lastExport, todayKey());
-  }, [bannerDismissed, lastExport]);
+  const showBanner = useMemo(() => shouldShowExportBanner(lastExport, todayKey()), [lastExport]);
 
   const exportNow = useCallback(() => {
     const now = new Date();
@@ -53,10 +48,6 @@ export function useBackup(api: AppDataApi): UseBackupApi {
     saveLastExport(today);
     setLastExport(today);
   }, [api.data]);
-
-  const dismissBanner = useCallback(() => {
-    setBannerDismissed(true);
-  }, []);
 
   const importFromText = useCallback(
     (text: string): ImportResult => {
@@ -74,7 +65,6 @@ export function useBackup(api: AppDataApi): UseBackupApi {
     showBanner,
     lastExport,
     exportNow,
-    dismissBanner,
     importFromText,
   };
 }
