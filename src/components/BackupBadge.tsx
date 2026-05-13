@@ -18,12 +18,16 @@ type Props = {
 
 type Phase = "hidden" | "in" | "perch" | "out";
 
-/** 各 phase の dwell 時間（ms）。hidden は呼び出しごとにランダム抽選する */
+/**
+ * 各 phase の dwell 時間（ms）。hidden は呼び出しごとにランダム抽選する。
+ * in / out は下記 transitionClass の `duration-500` と一致させる
+ * （短いと out → hidden で transition-none に切り替わった瞬間に位置がスナップして見える）。
+ */
 const PHASE_DURATIONS: Record<Phase, () => number> = {
   hidden: () => 30_000 + Math.floor(Math.random() * 90_000),
-  in: () => 400,
+  in: () => 500,
   perch: () => 5_000,
-  out: () => 400,
+  out: () => 500,
 };
 
 const NEXT_PHASE: Record<Phase, Phase> = {
@@ -57,15 +61,18 @@ export function BackupBadge({ onSave }: Props) {
   const transitionClass =
     phase === "hidden" ? "transition-none" : "transition-transform duration-500 ease-out";
 
+  const isHidden = phase === "hidden";
+
   return (
-    <div
-      aria-hidden={phase === "hidden"}
-      className="pointer-events-none fixed inset-x-0 top-0 z-40 flex justify-center safe-top"
-    >
+    <div className="pointer-events-none fixed inset-x-0 top-0 z-40 flex justify-center safe-top">
       <button
         type="button"
         onClick={onSave}
         aria-label="バックアップを保存"
+        // hidden 中はオフスクリーンに居るがフォーカス可能要素として DOM に残るため、
+        // a11y ツリーから除外しキーボード Tab でも到達不能にする
+        aria-hidden={isHidden || undefined}
+        tabIndex={isHidden ? -1 : undefined}
         className={`pointer-events-auto mt-2 w-12 h-12 flex items-center justify-center ${transitionClass}`}
         style={{ transform: `translateX(${translate})` }}
       >
