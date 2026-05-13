@@ -17,7 +17,9 @@ type Props = {
 const LONG_PRESS_MS = 500;
 
 export function StockList({ api, restoreSlot }: Props) {
-  const [expanded, setExpanded] = useState(true);
+  // 起動時は「閉」状態。妻が献立メモ操作中はストックリストが画面を占有しないよう、
+  // 必要な時だけタップで展開する（SPEC「ストックリスト」改訂）。
+  const [expanded, setExpanded] = useState(false);
   // 追加 input の妥当性のみ state で持ち、値は uncontrolled な input から ref で読む。
   // controlled (`value=`) にすると iOS Safari の IME 中に親 state 反映がスキップされた瞬間
   // React が DOM 値を上書きし入力が消える（メモ欄と同じ問題）。
@@ -376,7 +378,15 @@ export function StockList({ api, restoreSlot }: Props) {
         <span className="font-medium">ストック（{api.data.stock.length}）</span>
         <span className="text-neutral-400">{expanded ? "▾" : "▸"}</span>
       </button>
-      {expanded && (
+      {/* アコーディオン本体：max-height transition で slide-down/up。
+          DOM は常時描画し、閉時は max-h-0 + pointer-events-none で操作不可にする。
+          aria-hidden で支援技術からも隠す。CLAUDE.md「アニメは 100-200ms 以内」準拠で 200ms。 */}
+      <div
+        className={`overflow-hidden transition-[max-height] duration-200 ease-out ${
+          expanded ? "max-h-96" : "max-h-0 pointer-events-none"
+        }`}
+        aria-hidden={!expanded}
+      >
         <div ref={scrollContainerRef} className="px-3 pb-3 max-h-48 overflow-y-auto">
           {api.data.stock.length === 0 && (
             <div className="flex flex-col items-center py-3 text-neutral-400">
@@ -467,7 +477,7 @@ export function StockList({ api, restoreSlot }: Props) {
           </div>
           {restoreSlot}
         </div>
-      )}
+      </div>
     </div>
   );
 }

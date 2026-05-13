@@ -53,6 +53,58 @@ function makeApi(overrides?: Partial<AppDataApi>): AppDataApi {
 }
 
 describe("StockList", () => {
+  describe("開閉トグル（起動時は閉）", () => {
+    // アコーディオン本体 wrapper はヘッダーの直後の兄弟要素として描画される
+    function getWrapper(): HTMLElement {
+      const header = screen.getByRole("button", { name: /ストック/ });
+      const wrapper = header.nextElementSibling as HTMLElement | null;
+      if (!wrapper) throw new Error("accordion wrapper not found");
+      return wrapper;
+    }
+
+    it("初期描画でヘッダーが aria-expanded=false、本体 wrapper が aria-hidden=true", () => {
+      render(<StockList api={makeApi()} />);
+      const header = screen.getByRole("button", { name: /ストック/ });
+      expect(header.getAttribute("aria-expanded")).toBe("false");
+      expect(getWrapper().getAttribute("aria-hidden")).toBe("true");
+    });
+
+    it("初期描画で本体 wrapper は max-h-0 + pointer-events-none で閉じている", () => {
+      render(<StockList api={makeApi()} />);
+      const wrapper = getWrapper();
+      expect(wrapper.className).toMatch(/max-h-0/);
+      expect(wrapper.className).toMatch(/pointer-events-none/);
+    });
+
+    it("ヘッダータップで開く（aria-expanded=true、wrapper が max-h-96 になる）", () => {
+      render(<StockList api={makeApi()} />);
+      const header = screen.getByRole("button", { name: /ストック/ });
+      fireEvent.click(header);
+      expect(header.getAttribute("aria-expanded")).toBe("true");
+      const wrapper = getWrapper();
+      expect(wrapper.getAttribute("aria-hidden")).toBe("false");
+      expect(wrapper.className).toMatch(/max-h-96/);
+      expect(wrapper.className).not.toMatch(/pointer-events-none/);
+    });
+
+    it("再度タップで閉じる", () => {
+      render(<StockList api={makeApi()} />);
+      const header = screen.getByRole("button", { name: /ストック/ });
+      fireEvent.click(header);
+      fireEvent.click(header);
+      expect(header.getAttribute("aria-expanded")).toBe("false");
+      expect(getWrapper().className).toMatch(/max-h-0/);
+    });
+
+    it("ヘッダーのインジケータが ▸（閉）/ ▾（開）で切り替わる", () => {
+      render(<StockList api={makeApi()} />);
+      const header = screen.getByRole("button", { name: /ストック/ });
+      expect(header.textContent).toContain("▸");
+      fireEvent.click(header);
+      expect(header.textContent).toContain("▾");
+    });
+  });
+
   describe("名前タップで編集モード進入（pointer 経路）", () => {
     it("pointerdown 直後の pointerup（長押し未成立）で編集モードに入り input が現れる", () => {
       const api = makeApi();
