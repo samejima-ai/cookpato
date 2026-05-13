@@ -128,7 +128,9 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-full max-w-xl mx-auto">
-      {backup.showBanner && <BackupBadge onSave={backup.exportNow} />}
+      {backup.showBanner && (
+        <BackupBadge onSave={backup.exportFile} onComplete={backup.markExported} />
+      )}
       <header className="relative shrink-0 safe-top">
         <SearchBar
           value={query}
