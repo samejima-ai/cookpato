@@ -167,7 +167,9 @@
 - 画面の `header` 直下に **`position: sticky`（または `fixed`）** で固定配置
 - `EditingTarget` が `null` のときは完全非表示（DONT.md「使わない機能を画面に置かない」原則に従う）
 - `EditingTarget` がセットされた時のみ slide-down 200ms で出現
-- フロート閉時は slide-up 200ms でフェード（CLAUDE.md「アニメは 100-200ms 以内」準拠、200ms 上限）
+- フロート閉時は即時非表示（DOM から消す）。閉アニメは行わない
+  - 採用理由：閉アニメは妻のメンタル上「閉じた → でも見える」の中間状態を生むだけで実用上の価値が薄く、実装複雑度（DOM 消去前のアニメ管理）に見合わない
+  - 出現アニメ（slide-down）のみ採用、CLAUDE.md「アニメは 100-200ms 以内」準拠の 200ms 上限
 
 ##### `EditingTarget` の型と意味
 ```

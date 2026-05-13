@@ -46,21 +46,26 @@ export function FloatingEditor({
         ? `line:${target.dateKey}:${target.lineIndex}`
         : `memo:${target.dateKey}`;
 
-  // target 変化で自動 focus
+  // target 変化で自動 focus + 検索ハイライト用の activeQuery を同期
   useEffect(() => {
-    if (target !== null && inputRef.current) {
+    if (target === null) {
+      // 閉時はクリア
+      onActiveTextChange?.("");
+      return;
+    }
+    if (inputRef.current) {
       inputRef.current.focus();
       // 末尾にカーソル
       const len = inputRef.current.value.length;
       inputRef.current.setSelectionRange(len, len);
-      // line target なら現状 text を検索ハイライトに送る
-      if (target.kind === "line") onActiveTextChange?.(inputRef.current.value);
     }
-  }, [target, onActiveTextChange]);
-
-  // 閉時にアクティブクエリをクリア
-  useEffect(() => {
-    if (target === null) onActiveTextChange?.("");
+    if (target.kind === "line") {
+      // line target：現状 text を検索ハイライトに送る
+      onActiveTextChange?.(inputRef.current?.value ?? "");
+    } else {
+      // memo target：line 経由で残っていた activeQuery をクリア
+      onActiveTextChange?.("");
+    }
   }, [target, onActiveTextChange]);
 
   if (target === null) {

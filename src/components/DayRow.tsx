@@ -340,10 +340,20 @@ function LineItem({
         tabIndex={0}
         aria-label={`${text}（タップで編集、長押しで削除モード）`}
         className="flex-1 min-w-0 self-center relative overflow-hidden cursor-text"
-        onMouseDown={lp.onMouseDown}
+        onMouseDown={(e) => {
+          // 押下開始ごとにフラグをリセット（前回の長押し成立フラグが残っているケースを潰す）
+          wasLongPressRef.current = false;
+          lp.onMouseDown();
+          // touch 経由でない場合のみここを通る
+          void e;
+        }}
         onMouseUp={lp.onMouseUp}
         onMouseLeave={lp.onMouseLeave}
-        onTouchStart={lp.onTouchStart}
+        onTouchStart={(e) => {
+          wasLongPressRef.current = false;
+          lp.onTouchStart();
+          void e;
+        }}
         onTouchEnd={lp.onTouchEnd}
         onTouchCancel={lp.onTouchCancel}
         onClick={(e) => {
