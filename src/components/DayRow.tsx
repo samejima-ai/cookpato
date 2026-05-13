@@ -3,7 +3,6 @@ import emptyDayImg from "../assets/empty-day.png";
 import favoriteImg from "../assets/favorite.png";
 import cartImg from "../assets/shimaenaga-cart.png";
 import { useAutoShrink } from "../hooks/useAutoShrink";
-import { useComposition } from "../hooks/useComposition";
 import { useLongPress } from "../hooks/useLongPress";
 import { formatDayLabel, isSaturday, isSunday } from "../lib/date";
 import { tapFeedback } from "../lib/haptics";
@@ -19,32 +18,25 @@ type Props = {
   showCheer: boolean;
   /**
    * today〜today+6 の範囲内か（入力状態に依存しない）。
-   * 空行★プレースホルダ表示判定に使う。部分入力後の残り空行にも★を出すため
-   * showCheer（全行空時のみ true）とは別の prop に分離する。
+   * 空行★プレースホルダ表示判定に使う。
    */
   inCheerWindow: boolean;
   /** お気に入り判定用の正規化済みキー集合 */
   favoriteKeys: Set<string>;
-  onTextChange: (text: string) => void;
+  /** 現在フロート編集中の行 index（自分の日付の行であれば数値、無関係なら null） */
+  editingLineIndex: number | null;
+  /** 現在フロート編集中の対象が自分の日付のメモなら true */
+  isMemoEditing: boolean;
   onToggleLine: (lineIndex: number) => void;
   onToggleFavorite: (lineIndex: number) => void;
   onToggleCart: (lineIndex: number) => void;
   onDeleteLine: (lineIndex: number) => void;
-  /** ちょいメモ（料理行とは別枠）の更新 */
-  onMemoChange: (text: string) => void;
-  /** 「＋追加」ボタン押下時：空 Line を 1 つ append する */
+  /** 「＋追加」ボタン押下時：空 Line を append + 即座にフロートで編集する */
   onAddLine: () => void;
-  /**
-   * 編集中のカーソル行テキストと、その行が属する日付を親に通知する。
-   * 編集開始時にも呼び、編集終了（blur）時は空文字で呼ぶ。
-   * アクティブ行の類似検索件数をヘッダーに出すためのフック。
-   * 日付は「自分自身を検索対象から除外する」ために使う。
-   */
-  onActiveQueryChange?: (text: string, date: DateKey) => void;
-  /** 編集モード進入時に呼ばれる。週達成判定の baseline スナップショットを取るため。 */
-  onBeginEdit?: (date: DateKey) => void;
-  /** textarea blur 時に呼ばれる。週達成（未達成→達成）遷移を確定する。 */
-  onCommitEdit?: (date: DateKey) => void;
+  /** 行タップ：その行を FloatingEditor で編集する */
+  onRequestEditLine: (lineIndex: number) => void;
+  /** ちょいメモタップ：メモを FloatingEditor で編集する */
+  onRequestEditMemo: () => void;
 };
 
 export function DayRow({
@@ -54,50 +46,22 @@ export function DayRow({
   showCheer,
   inCheerWindow,
   favoriteKeys,
-  onTextChange,
+  editingLineIndex,
+  isMemoEditing,
   onToggleLine,
   onToggleFavorite,
   onToggleCart,
   onDeleteLine,
-  onMemoChange,
   onAddLine,
-  onActiveQueryChange,
-  onBeginEdit,
-  onCommitEdit,
+  onRequestEditLine,
+  onRequestEditMemo,
 }: Props) {
-  const [editing, setEditing] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<number | null>(null);
   // 行削除モード（長押しで突入）中の対象行 index。null は非アクティブ。
   // 同時に揺れる行は高々 1 本（iOS のぷるぷるモード相当）。
   const [wobbleIndex, setWobbleIndex] = useState<number | null>(null);
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const wobbleRowRef = useRef<HTMLLIElement | null>(null);
-  const ime = useComposition();
   const lines = day?.lines ?? [];
-  const rawText = lines.map((l) => l.text).join("\n");
-
-  useEffect(() => {
-    if (editing && textareaRef.current) {
-      textareaRef.current.focus();
-      const len = textareaRef.current.value.length;
-      textareaRef.current.setSelectionRange(len, len);
-      autoResize(textareaRef.current);
-      // 編集進入時点のカーソル行を通知
-      onActiveQueryChange?.(caretLine(textareaRef.current.value, len), dateKey);
-      // 週達成判定の baseline スナップショットを親に取らせる
-      onBeginEdit?.(dateKey);
-    }
-  }, [editing, onActiveQueryChange, onBeginEdit, dateKey]);
-
-  // 編集終了時にアクティブクエリをクリア
-  useEffect(() => {
-    if (!editing) onActiveQueryChange?.("", dateKey);
-  }, [editing, onActiveQueryChange, dateKey]);
-
-  // 編集モードに入ったら wobble は解除（重複表示の回避）
-  useEffect(() => {
-    if (editing) setWobbleIndex(null);
-  }, [editing]);
 
   // wobble 中は「対象行の外をタップ」「ESC」で解除する
   useEffect(() => {
@@ -118,12 +82,6 @@ export function DayRow({
     };
   }, [wobbleIndex]);
 
-  function emitActiveLine(el: HTMLTextAreaElement): void {
-    if (!onActiveQueryChange) return;
-    const caret = el.selectionStart ?? el.value.length;
-    onActiveQueryChange(caretLine(el.value, caret), dateKey);
-  }
-
   const holidayName = getHolidayName(dateKey);
   const labelColor =
     holidayName || isSunday(dateKey)
@@ -140,7 +98,6 @@ export function DayRow({
     e.stopPropagation();
     tapFeedback();
     onAddLine();
-    setEditing(true);
   };
 
   return (
@@ -151,9 +108,7 @@ export function DayRow({
         </div>
         {holidayName && <HolidayLabel name={holidayName} />}
         {isToday && <div className="text-xs text-yellow-700 mt-0.5">今日</div>}
-        {/* シマエナガ（cheer）：日付列内の装飾要素。タップ無効。
-            起動時に自動生成された 4 空行の日にも継続表示するため、cheer.ts の
-            isEmptyDay 拡張定義（全行 text==="" も空日扱い）と組み合わせて動く。 */}
+        {/* シマエナガ（cheer）：日付列内の装飾要素。タップ無効。 */}
         {showCheer && (
           <img
             src={emptyDayImg}
@@ -163,127 +118,63 @@ export function DayRow({
             className="w-10 h-10 opacity-80 animate-cheer-flip mt-0.5 pointer-events-none select-none"
           />
         )}
-        {/* iOS Safari の IME 多重入力バグ対策として、key={dateKey} で日付ごとに input を再マウントし
-            uncontrolled パターン（defaultValue）を採る。SPEC.md「ちょいメモ」参照。 */}
         <MemoField
-          key={dateKey}
           dateKey={dateKey}
           value={day?.memo ?? ""}
-          onChange={onMemoChange}
+          isEditing={isMemoEditing}
+          onRequestEdit={onRequestEditMemo}
         />
       </div>
       <div className="flex-1 min-w-0">
-        {editing ? (
-          <textarea
-            ref={textareaRef}
-            defaultValue={rawText}
-            onCompositionStart={ime.onCompositionStart}
-            onCompositionEnd={(e) => {
-              ime.onCompositionEnd();
-              // compositionEnd の最終確定値を明示反映する（iOS Safari では
-              // compositionEnd 後の onChange が発火しない経路があるため）。
-              // 他ブラウザでは直後に同値の onChange が続くため markCommitted で 1 回抑止する。
-              const committed = e.currentTarget.value;
-              ime.markCommitted(committed);
-              onTextChange(committed);
-              autoResize(e.currentTarget);
-              emitActiveLine(e.currentTarget);
-            }}
-            onChange={(e) => {
-              if (ime.shouldSkipChange(e.target.value, e.nativeEvent)) return;
-              onTextChange(e.target.value);
-              autoResize(e.target);
-              emitActiveLine(e.target);
-            }}
-            onSelect={(e) => emitActiveLine(e.currentTarget)}
-            onKeyUp={(e) => emitActiveLine(e.currentTarget)}
-            onClick={(e) => emitActiveLine(e.currentTarget)}
-            onBlur={() => {
-              setEditing(false);
-              onCommitEdit?.(dateKey);
-            }}
-            className="w-full resize-none bg-transparent outline-none text-base leading-7 min-h-7"
-            rows={Math.max(1, lines.length)}
-            aria-label={`${formatDayLabel(dateKey)} の献立を編集`}
-          />
-        ) : (
-          // 外側は LineItem 内のトグル/お気に入り/削除ボタンを内包するため <button> ではなく
-          // <div> を使う。button 入れ子は HTML 的に無効で、アクセシビリティツリーが崩れるため。
-          // テキスト領域タップで編集モード進入、ボタン側は stopPropagation で分離する。
-          // 内部にトグル/お気に入り/削除ボタンを含むため <button> ネスト回避で <div role="button"> を採用
-          <div
-            onClick={() => setEditing(true)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") setEditing(true);
-            }}
-            className="w-full min-h-11 py-1 cursor-text"
-            // biome-ignore lint/a11y/useSemanticElements: <button> ネスト回避
-            role="button"
-            tabIndex={0}
-            aria-label={`${formatDayLabel(dateKey)} の献立を編集`}
-          >
-            <ul>
-              {lines.map((line, idx) => {
-                if (line.text === "") {
-                  // 空行：today〜today+6 の範囲内（inCheerWindow）でのみ ★ プレースホルダを描画。
-                  // showCheer（全行空時のみ true）ではなく inCheerWindow を使うことで、
-                  // 1 行入力後に残った空行にも★が継続表示される（混在表示）。
-                  // 左端カラム（w-11）に★を置き、右側は LineItem と同様にテキスト用 flex-1 を確保。
-                  // タップは親 <div role="button"> が拾って textarea 編集モードへ進入し、
-                  // 入力確定で line.text!=="" となれば自然に LineItem（チェックボックス + 料理名）へ切り替わる。
-                  if (!inCheerWindow) return null;
-                  return (
-                    <li
-                      // biome-ignore lint/suspicious/noArrayIndexKey: 行の並べ替えはせず、追加・削除のみなので index をキーにしてよい
-                      key={`${dateKey}-${idx}-empty`}
-                      className="flex items-stretch min-h-11 rounded"
-                    >
-                      <span
-                        aria-hidden="true"
-                        className="w-11 flex items-center justify-center text-yellow-300 text-lg shrink-0"
-                      >
-                        ★
-                      </span>
-                      <span className="flex-1 min-w-0 self-center text-neutral-300 text-sm pl-1">
-                        <span className="sr-only">未入力の行</span>
-                      </span>
-                    </li>
-                  );
-                }
-                return (
-                  <LineItem
-                    // biome-ignore lint/suspicious/noArrayIndexKey: 行の並べ替えはせず、追加・削除のみなので index をキーにしてよい（SPEC.md 準拠）
-                    key={`${dateKey}-${idx}`}
-                    text={line.text}
-                    done={line.done}
-                    favorite={favoriteKeys.has(favoriteKey(line.text))}
-                    cart={line.cart === true}
-                    wobble={wobbleIndex === idx}
-                    rowRef={wobbleIndex === idx ? wobbleRowRef : undefined}
-                    onToggle={() => onToggleLine(idx)}
-                    onToggleFavorite={() => onToggleFavorite(idx)}
-                    onToggleCart={() => onToggleCart(idx)}
-                    onLongPress={() => setWobbleIndex(idx)}
-                    onRequestDelete={() => {
-                      setWobbleIndex(null);
-                      setPendingDelete(idx);
-                    }}
-                  />
-                );
-              })}
-            </ul>
-            {/* 「＋追加」ボタン：行末常設。空 Line を 1 つ append して編集モードへ。
-                親 <div role="button"> の編集モード進入と分けるため stopPropagation。 */}
-            <button
-              type="button"
-              onClick={handleAddLine}
-              aria-label="行を追加"
-              className="w-11 h-11 flex items-center justify-center text-neutral-300 active:text-neutral-500 touch-manipulation"
-            >
-              ＋
-            </button>
-          </div>
-        )}
+        <ul>
+          {lines.map((line, idx) => {
+            if (line.text === "") {
+              // 空行：inCheerWindow 内のみ ★ プレースホルダを描画。
+              // タップで FloatingEditor を起動して入力開始。
+              if (!inCheerWindow) return null;
+              const isThisEditing = editingLineIndex === idx;
+              return (
+                <EmptyLineItem
+                  // biome-ignore lint/suspicious/noArrayIndexKey: 行の並べ替えはせず、追加・削除のみなので index をキーにしてよい
+                  key={`${dateKey}-${idx}-empty`}
+                  isEditing={isThisEditing}
+                  onTap={() => onRequestEditLine(idx)}
+                />
+              );
+            }
+            return (
+              <LineItem
+                // biome-ignore lint/suspicious/noArrayIndexKey: 行の並べ替えはせず、追加・削除のみなので index をキーにしてよい（SPEC.md 準拠）
+                key={`${dateKey}-${idx}`}
+                text={line.text}
+                done={line.done}
+                favorite={favoriteKeys.has(favoriteKey(line.text))}
+                cart={line.cart === true}
+                wobble={wobbleIndex === idx}
+                isEditing={editingLineIndex === idx}
+                rowRef={wobbleIndex === idx ? wobbleRowRef : undefined}
+                onToggle={() => onToggleLine(idx)}
+                onToggleFavorite={() => onToggleFavorite(idx)}
+                onToggleCart={() => onToggleCart(idx)}
+                onTap={() => onRequestEditLine(idx)}
+                onLongPress={() => setWobbleIndex(idx)}
+                onRequestDelete={() => {
+                  setWobbleIndex(null);
+                  setPendingDelete(idx);
+                }}
+              />
+            );
+          })}
+        </ul>
+        {/* 「＋追加」ボタン：行末常設。空 Line を 1 つ append して FloatingEditor を起動する（親が処理） */}
+        <button
+          type="button"
+          onClick={handleAddLine}
+          aria-label="行を追加"
+          className="w-11 h-11 flex items-center justify-center text-neutral-300 active:text-neutral-500 touch-manipulation"
+        >
+          ＋
+        </button>
       </div>
       {pendingDelete !== null && (
         <ConfirmDeleteDialog
@@ -299,6 +190,38 @@ export function DayRow({
   );
 }
 
+type EmptyLineItemProps = {
+  isEditing: boolean;
+  onTap: () => void;
+};
+
+/** 空行（★プレースホルダ）。タップで FloatingEditor 起動。 */
+function EmptyLineItem({ isEditing, onTap }: EmptyLineItemProps) {
+  const bgClass = isEditing ? "bg-yellow-50" : "";
+  return (
+    <li className={`flex items-stretch min-h-11 rounded ${bgClass}`}>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          tapFeedback();
+          onTap();
+        }}
+        aria-label="未入力の行（タップで入力）"
+        className="flex items-stretch min-h-11 w-full cursor-text bg-transparent text-left"
+      >
+        <span
+          aria-hidden="true"
+          className="w-11 flex items-center justify-center text-yellow-300 text-lg shrink-0"
+        >
+          ★
+        </span>
+        <span className="flex-1 min-w-0 self-center text-neutral-300 text-sm pl-1">未入力の行</span>
+      </button>
+    </li>
+  );
+}
+
 type LineItemProps = {
   text: string;
   done: boolean;
@@ -307,11 +230,15 @@ type LineItemProps = {
   cart: boolean;
   /** 削除モード（長押し突入）中か。true の間だけ ✕ ボタンを表示＋行を揺らす。 */
   wobble: boolean;
+  /** この行が FloatingEditor で編集中か（薄い背景色ハイライト） */
+  isEditing: boolean;
   /** wobble 中の外タップ判定用に親が渡す `<li>` 参照（wobble=false のときは未指定） */
   rowRef?: React.Ref<HTMLLIElement>;
   onToggle: () => void;
   onToggleFavorite: () => void;
   onToggleCart: () => void;
+  /** 料理名エリアのタップ。短押し時のみ。長押し時は onLongPress が代わりに発火する */
+  onTap: () => void;
   /** 料理名エリアを長押しされたとき。親は対応行を wobble 状態に遷移させる。 */
   onLongPress: () => void;
   onRequestDelete: () => void;
@@ -322,18 +249,15 @@ type LineItemProps = {
  *
  * 調理中操作の最適化（SPEC「完了トグル（品単位）」改訂）：
  * - ヒット領域：トグル/お気に入り/削除ともに 44×44px（iOS HIG 下限）
- *   （料理名の表示幅を最大化するため、以前の「行左 1/3 占有」は廃止）
  * - 視覚フィードバック：文字色グレー + チェックボックスのグレー塗り
- *   （完了行は静かに後退させ、未完了行との相対的なコントラストで識別）
  * - 料理名は 1 行に自動縮小（MemoField と同じ `useAutoShrink`）
  * - タップ時 `tapFeedback()`（対応端末のみ、非対応は no-op）
  * - 300ms 以内の連続タップは 1 回として扱う（チャタリング防止）
  *
- * 行削除の UI：
- * - ✕ ボタンは常時非表示（料理名の表示幅を最大化するため）
- * - 料理名エリアを 500ms 長押しすると「削除モード（ぷるぷる）」に入り
- *   ✕ が現れる。以降は従来の確認ダイアログ経由で削除
- * - 削除モード中の外タップ / ESC で通常表示に戻る（親 `DayRow` が制御）
+ * 編集導線（F011 移行後）：
+ * - 料理名エリアの短押し（タップ）→ onTap → 親が FloatingEditor を起動
+ * - 料理名エリアの長押し（500ms）→ onLongPress → 削除モード（wobble）
+ * - 長押し成立後の click は内部 flag で抑止（onTap が誤発火しないようにする）
  */
 function LineItem({
   text,
@@ -341,10 +265,12 @@ function LineItem({
   favorite,
   cart,
   wobble,
+  isEditing,
   rowRef,
   onToggle,
   onToggleFavorite,
   onToggleCart,
+  onTap,
   onLongPress,
   onRequestDelete,
 }: LineItemProps) {
@@ -368,7 +294,11 @@ function LineItem({
     tapFeedback();
     onRequestDelete();
   };
-  const longPress = useLongPress(() => {
+
+  // 長押し成立時に立てるフラグ。直後の click を onTap から抑止する用途。
+  const wasLongPressRef = useRef(false);
+  const lp = useLongPress(() => {
+    wasLongPressRef.current = true;
     tapFeedback();
     onLongPress();
   });
@@ -384,7 +314,8 @@ function LineItem({
   const checkboxClass = done
     ? "bg-neutral-400 border-neutral-400 text-white"
     : "border-neutral-300 bg-white";
-  const liClass = `flex items-stretch min-h-11 rounded ${wobble ? "animate-row-wobble" : ""}`;
+  const editingBg = isEditing ? "bg-yellow-50" : "";
+  const liClass = `flex items-stretch min-h-11 rounded ${editingBg} ${wobble ? "animate-row-wobble" : ""}`;
 
   return (
     <li ref={rowRef} className={liClass}>
@@ -401,10 +332,45 @@ function LineItem({
           {done ? "✓" : ""}
         </span>
       </button>
+      {/* 料理名エリア：短押しで onTap（FloatingEditor 起動）、長押しで onLongPress（削除モード進入） */}
       <div
         ref={containerRef}
-        className="flex-1 min-w-0 self-center relative overflow-hidden"
-        {...longPress}
+        // biome-ignore lint/a11y/useSemanticElements: 既存 LineItem 内の button 群とのネスト回避で div + role=button を採用
+        role="button"
+        tabIndex={0}
+        aria-label={`${text}（タップで編集、長押しで削除モード）`}
+        className="flex-1 min-w-0 self-center relative overflow-hidden cursor-text"
+        onMouseDown={(e) => {
+          // 押下開始ごとにフラグをリセット（前回の長押し成立フラグが残っているケースを潰す）
+          wasLongPressRef.current = false;
+          lp.onMouseDown();
+          // touch 経由でない場合のみここを通る
+          void e;
+        }}
+        onMouseUp={lp.onMouseUp}
+        onMouseLeave={lp.onMouseLeave}
+        onTouchStart={(e) => {
+          wasLongPressRef.current = false;
+          lp.onTouchStart();
+          void e;
+        }}
+        onTouchEnd={lp.onTouchEnd}
+        onTouchCancel={lp.onTouchCancel}
+        onClick={(e) => {
+          // 長押し成立後の click は抑止（onTap 誤発火を防ぐ）
+          if (wasLongPressRef.current) {
+            wasLongPressRef.current = false;
+            e.stopPropagation();
+            return;
+          }
+          onTap();
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onTap();
+          }
+        }}
       >
         {/* 計測用：BASE_PX で描画したときの自然幅を得るための非表示要素 */}
         <span
@@ -559,30 +525,12 @@ function useDebouncedTap(
   );
 }
 
-function autoResize(el: HTMLTextAreaElement): void {
-  el.style.height = "auto";
-  el.style.height = `${el.scrollHeight}px`;
-}
-
 /**
- * textarea の value とカーソル位置から、カーソルのある 1 行分のテキストを返す。
- * 行末改行は含めない。空行は空文字を返す。
- */
-function caretLine(value: string, caret: number): string {
-  const start = value.lastIndexOf("\n", caret - 1) + 1;
-  const nextNl = value.indexOf("\n", caret);
-  const end = nextNl === -1 ? value.length : nextNl;
-  return value.slice(start, end);
-}
-
-/**
- * 祝日名のラベル。日付列幅（96px）に収まらない長さ（例：「体育の日（スポーツの日）」
- * 「勤労感謝の日 振替休日」）でも 1 行表示を維持するため、`useAutoShrink` で
- * フォントサイズを動的縮小する（CLAUDE.md「文字列は1行表示」原則準拠）。
- * ResizeObserver で容器幅変化にも追従するため、画面サイズ変化（端末違い・横画面）でも崩れない。
+ * 祝日名のラベル。日付列幅（96px）に収まらない長さでも 1 行表示を維持するため、
+ * `useAutoShrink` でフォントサイズを動的縮小する。
  */
 function HolidayLabel({ name }: { name: string }) {
-  const BASE_PX = 12; // text-xs 相当
+  const BASE_PX = 12;
   const { containerRef, measureRef, fontPx } = useAutoShrink({
     value: name,
     basePx: BASE_PX,
@@ -611,24 +559,19 @@ function HolidayLabel({ name }: { name: string }) {
 type MemoFieldProps = {
   dateKey: DateKey;
   value: string;
-  onChange: (text: string) => void;
+  isEditing: boolean;
+  onRequestEdit: () => void;
 };
 
 /**
- * ちょいメモ欄。料理行とは別枠の短文メモ。
- * - 日付列（w-24 = 96px）内に収める
- * - 実測した自然幅をもとに font-size を動的に縮小し、1 行で全文表示する
- *   （Excel の「縮小して全体を表示」に相当。横スクロールを避ける）
- * - 空のときは小さくプレースホルダ「メモ」のみ
- * - 料理行の編集モードとは領域分離（stopPropagation）
+ * ちょいメモ欄（表示専用、F011 移行後）。
  *
- * 入力は **uncontrolled**（`defaultValue`）。
- * iOS Safari の IME 中に親 state を React 経由で input.value に書き戻すと、
- * 未確定文字が消えたり多重反映されるため、value プロップでは制御しない。
- * 親 state は永続化のためだけに更新する。日付切替時の初期値同期は呼び出し側の
- * `key={dateKey}` による再マウントで担保する（SPEC.md「ちょいメモ」参照）。
+ * - 編集は FloatingEditor 経由（タップで `onRequestEdit` を親に通知）
+ * - 表示は 1 行に動的縮小（`useAutoShrink`）
+ * - 空のときはプレースホルダ「メモ」を薄い色で表示
+ * - 編集中はハイライト（bg-yellow-50）
  */
-function MemoField({ dateKey, value, onChange }: MemoFieldProps) {
+function MemoField({ dateKey, value, isEditing, onRequestEdit }: MemoFieldProps) {
   const BASE_PX = 14;
   const { containerRef, measureRef, fontPx } = useAutoShrink({
     value,
@@ -636,44 +579,45 @@ function MemoField({ dateKey, value, onChange }: MemoFieldProps) {
     minPx: 8,
     emptyPx: 10,
   });
-  const ime = useComposition();
+
+  const isEmpty = value === "";
+  const editingBg = isEditing ? "bg-yellow-50" : "";
 
   return (
     <div
       ref={containerRef}
-      className="mt-0.5 relative w-full overflow-hidden"
-      onClick={(e) => e.stopPropagation()}
-      onKeyDown={(e) => e.stopPropagation()}
+      className={`mt-0.5 relative w-full overflow-hidden cursor-text rounded ${editingBg}`}
+      onClick={(e) => {
+        e.stopPropagation();
+        onRequestEdit();
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onRequestEdit();
+        }
+      }}
+      // biome-ignore lint/a11y/useSemanticElements: button ネスト回避と既存の領域分離パターンに揃える
+      role="button"
+      tabIndex={0}
+      aria-label={`${formatDayLabel(dateKey)} のメモ${isEmpty ? "（未入力）" : ""}`}
     >
-      {/* 計測用：BASE_PX で描画したときの自然幅を得るための非表示要素。
-          レイアウトには影響させないため absolute + invisible。 */}
       <span
         ref={measureRef}
         aria-hidden="true"
         className="invisible absolute top-0 left-0 whitespace-pre italic"
         style={{ fontSize: `${BASE_PX}px` }}
       >
-        {value || "\u00A0"}
+        {value || " "}
       </span>
-      <input
-        type="text"
-        defaultValue={value}
-        onCompositionStart={ime.onCompositionStart}
-        onCompositionEnd={(e) => {
-          ime.onCompositionEnd();
-          const committed = e.currentTarget.value;
-          ime.markCommitted(committed);
-          onChange(committed);
-        }}
-        onChange={(e) => {
-          if (ime.shouldSkipChange(e.target.value, e.nativeEvent)) return;
-          onChange(e.target.value);
-        }}
-        placeholder="メモ"
+      <div
         style={{ fontSize: `${fontPx}px` }}
-        className="w-full bg-transparent outline-none text-neutral-500 italic placeholder:text-neutral-300 placeholder:not-italic leading-tight py-0"
-        aria-label={`${formatDayLabel(dateKey)} のメモ`}
-      />
+        className={`leading-tight whitespace-nowrap overflow-hidden ${
+          isEmpty ? "text-neutral-300 not-italic" : "text-neutral-500 italic"
+        }`}
+      >
+        {value || "メモ"}
+      </div>
     </div>
   );
 }

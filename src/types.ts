@@ -55,6 +55,15 @@ export type AppData = {
   completedWeeks: DateKey[];
 };
 
+/**
+ * フロート入力フォーム（F011）の編集対象。
+ * App.tsx で `EditingTarget | null` を保持し、null のときフロート非表示、
+ * セット時にフロート表示 + 自動 focus する。
+ */
+export type EditingTarget =
+  | { kind: "line"; dateKey: DateKey; lineIndex: number }
+  | { kind: "memo"; dateKey: DateKey };
+
 /** 検索結果1件 */
 export type SearchHit = {
   date: DateKey;

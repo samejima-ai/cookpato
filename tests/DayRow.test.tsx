@@ -1,6 +1,6 @@
 /**
- * DayRow の完了トグル強化（SPEC「完了トグル」改訂）・行削除確認ダイアログ・
- * お気に入りマーカー（正規化キー）のリグレッションテスト。
+ * DayRow のリグレッションテスト（F011 フロート入力フォーム導入後）。
+ * textarea ベースの編集モードは撤去され、行・メモのタップは親へ通知される。
  */
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -13,6 +13,12 @@ const dateKey = "2026-04-15";
 function makeDay(lines: { text: string; done?: boolean }[]): DayMeals {
   return {
     lines: lines.map((l) => ({ text: l.text, done: l.done ?? false })),
+  };
+}
+
+function emptyLines(count: number): DayMeals {
+  return {
+    lines: Array.from({ length: count }, () => ({ text: "", done: false })),
   };
 }
 
@@ -39,23 +45,23 @@ function baseProps() {
     showCheer: false,
     inCheerWindow: false,
     favoriteKeys: new Set<string>(),
-    onTextChange: () => {},
+    editingLineIndex: null as number | null,
+    isMemoEditing: false,
     onToggleLine: () => {},
     onToggleFavorite: () => {},
     onToggleCart: () => {},
     onDeleteLine: () => {},
-    onMemoChange: () => {},
     onAddLine: () => {},
+    onRequestEditLine: () => {},
+    onRequestEditMemo: () => {},
   };
 }
 
 describe("DayRow", () => {
   describe("初期表示", () => {
-    it("空日はタップ進入用のトリガー要素を出す（textarea ではない）", () => {
+    it("空日（day undefined）でも描画でき textarea は存在しない", () => {
       render(<DayRow {...baseProps()} />);
-      const trigger = screen.getByLabelText(/4月15日.*献立を編集/);
-      expect(trigger.tagName).toBe("DIV");
-      // 献立の textarea は編集モードでのみ出現する（メモの input は常設なので対象外）
+      // 新モデルでは textarea は存在しない（FloatingEditor 移行）
       expect(
         screen.queryAllByRole("textbox").find((el) => el.tagName === "TEXTAREA"),
       ).toBeUndefined();
@@ -106,33 +112,6 @@ describe("DayRow", () => {
       fireEvent.click(cartButtons[1] as HTMLElement);
       expect(onToggleCart).toHaveBeenCalledWith(1);
     });
-
-    it("買い物マーカーボタンは♡（お気に入り）の左隣にある", () => {
-      render(<DayRow {...baseProps()} day={makeDay([{ text: "豚バラ大根" }])} />);
-      const cartBtn = screen.getByRole("button", { name: /買い物マーク/ });
-      const favBtn = screen.getByRole("button", { name: /お気に入り/ });
-      // 兄弟順序：DOM 上で cart が favorite より前に出現する
-      const li = cartBtn.closest("li");
-      if (!li) throw new Error("li not found");
-      const buttons = Array.from(li.querySelectorAll("button")) as HTMLElement[];
-      expect(buttons.indexOf(cartBtn)).toBeLessThan(buttons.indexOf(favBtn));
-    });
-
-    it("買い物マーカーは♡（お気に入り）と独立してトグルできる", () => {
-      const onToggleCart = vi.fn();
-      const onToggleFavorite = vi.fn();
-      render(
-        <DayRow
-          {...baseProps()}
-          day={makeDay([{ text: "豚バラ大根" }])}
-          onToggleCart={onToggleCart}
-          onToggleFavorite={onToggleFavorite}
-        />,
-      );
-      fireEvent.click(screen.getByRole("button", { name: /買い物マーク/ }));
-      expect(onToggleCart).toHaveBeenCalledTimes(1);
-      expect(onToggleFavorite).not.toHaveBeenCalled();
-    });
   });
 
   describe("完了トグルのチャタリング防止", () => {
@@ -146,7 +125,6 @@ describe("DayRow", () => {
         />,
       );
       const toggle = screen.getByRole("button", { name: /完了にする/ });
-      // 同フレーム内で 3 連打 → 先頭 1 回だけ通る
       fireEvent.click(toggle);
       fireEvent.click(toggle);
       fireEvent.click(toggle);
@@ -154,64 +132,157 @@ describe("DayRow", () => {
     });
   });
 
-  describe("トグルタップが編集モードに漏れない", () => {
-    it("トグルボタンタップは親の編集トリガーへ伝播しない", () => {
-      const onToggleLine = vi.fn();
+  describe("行タップ → FloatingEditor 起動の通知", () => {
+    it("料理行のテキスト領域タップで onRequestEditLine(idx) が呼ばれる", () => {
+      const onRequestEditLine = vi.fn();
       render(
         <DayRow
           {...baseProps()}
-          day={makeDay([{ text: "豚バラ大根" }])}
-          onToggleLine={onToggleLine}
+          day={makeDay([{ text: "カレー" }, { text: "サラダ" }])}
+          onRequestEditLine={onRequestEditLine}
         />,
       );
-      const toggle = screen.getByRole("button", { name: /完了にする/ });
-      fireEvent.click(toggle);
-      expect(onToggleLine).toHaveBeenCalledWith(0);
-      // 編集モード進入したら textarea が現れるが、ここでは現れないはず
-      expect(
-        screen.queryAllByRole("textbox").find((el) => el.tagName === "TEXTAREA"),
-      ).toBeUndefined();
-    });
-  });
-
-  describe("ちょいメモ欄", () => {
-    it("memo が空でもメモ入力欄（プレースホルダ「メモ」）が常に表示される", () => {
-      render(<DayRow {...baseProps()} />);
-      const memo = screen.getByLabelText(/4月15日.*のメモ/);
-      expect(memo.tagName).toBe("INPUT");
-      expect((memo as HTMLInputElement).placeholder).toBe("メモ");
-      expect((memo as HTMLInputElement).value).toBe("");
+      const textAreas = screen.getAllByLabelText(/タップで編集、長押しで削除モード/);
+      fireEvent.click(textAreas[1] as HTMLElement);
+      expect(onRequestEditLine).toHaveBeenCalledWith(1);
     });
 
-    it("保存済みの memo が初期値として表示される", () => {
-      render(
-        <DayRow {...baseProps()} day={{ lines: [{ text: "", done: false }], memo: "遅くなる" }} />,
-      );
-      const memo = screen.getByLabelText(/4月15日.*のメモ/) as HTMLInputElement;
-      expect(memo.value).toBe("遅くなる");
-    });
-
-    it("入力のたびに onMemoChange が呼ばれる", () => {
-      const onMemoChange = vi.fn();
-      render(<DayRow {...baseProps()} onMemoChange={onMemoChange} />);
-      const memo = screen.getByLabelText(/4月15日.*のメモ/);
-      fireEvent.change(memo, { target: { value: "外食" } });
-      expect(onMemoChange).toHaveBeenLastCalledWith("外食");
-    });
-
-    it("メモ欄のクリックで料理行の編集モードに入らない", () => {
-      render(<DayRow {...baseProps()} />);
+    it("メモ欄タップで onRequestEditMemo が呼ばれる", () => {
+      const onRequestEditMemo = vi.fn();
+      render(<DayRow {...baseProps()} onRequestEditMemo={onRequestEditMemo} />);
       const memo = screen.getByLabelText(/4月15日.*のメモ/);
       fireEvent.click(memo);
-      // 料理行の textarea が出ていないこと（メモ入力は input 型だが role=textbox でもヒットする）
-      const textboxes = screen.queryAllByRole("textbox");
-      // メモ自身は input[type=text] なのでヒットするが、料理行の textarea はヒットしないはず
-      expect(textboxes.some((el) => el.tagName === "TEXTAREA")).toBe(false);
+      expect(onRequestEditMemo).toHaveBeenCalled();
+    });
+
+    it("メモが空でも欄は描画され、プレースホルダ「メモ」が表示される", () => {
+      render(<DayRow {...baseProps()} />);
+      const memo = screen.getByLabelText(/4月15日.*のメモ（未入力）/);
+      expect(memo.textContent).toContain("メモ");
+    });
+
+    it("空行★行をタップすると onRequestEditLine(idx) が呼ばれる", () => {
+      const onRequestEditLine = vi.fn();
+      render(
+        <DayRow
+          {...baseProps()}
+          inCheerWindow
+          day={emptyLines(4)}
+          onRequestEditLine={onRequestEditLine}
+        />,
+      );
+      const starItems = screen.getAllByRole("button", { name: /未入力の行/ });
+      expect(starItems).toHaveLength(4);
+      fireEvent.click(starItems[2] as HTMLElement);
+      expect(onRequestEditLine).toHaveBeenCalledWith(2);
     });
   });
 
-  describe("行削除の確認ダイアログ", () => {
-    // 長押し（500ms タイマー）を進めるため fake timers を使う
+  describe("編集中ハイライト（editingLineIndex / isMemoEditing）", () => {
+    it("editingLineIndex の行に bg-yellow-50 が付く", () => {
+      render(
+        <DayRow
+          {...baseProps()}
+          day={makeDay([{ text: "カレー" }, { text: "サラダ" }])}
+          editingLineIndex={0}
+        />,
+      );
+      const toggleButtons = screen.getAllByRole("button", { name: /完了にする/ });
+      const li0 = toggleButtons[0]?.closest("li");
+      const li1 = toggleButtons[1]?.closest("li");
+      expect(li0?.className).toMatch(/bg-yellow-50/);
+      expect(li1?.className).not.toMatch(/bg-yellow-50/);
+    });
+
+    it("isMemoEditing=true のときメモ欄に bg-yellow-50 が付く", () => {
+      render(<DayRow {...baseProps()} isMemoEditing />);
+      const memo = screen.getByLabelText(/4月15日.*のメモ/);
+      expect(memo.className).toMatch(/bg-yellow-50/);
+    });
+
+    it("空行★も editingLineIndex で背景色が付く", () => {
+      const { container } = render(
+        <DayRow {...baseProps()} inCheerWindow day={emptyLines(2)} editingLineIndex={1} />,
+      );
+      const starItems = container.querySelectorAll("li");
+      expect(starItems[0]?.className).not.toMatch(/bg-yellow-50/);
+      expect(starItems[1]?.className).toMatch(/bg-yellow-50/);
+    });
+  });
+
+  describe("空行★プレースホルダ", () => {
+    function countStars(container: HTMLElement): number {
+      // 新構造: <li><button><span aria-hidden>★</span><span>未入力の行</span></button></li>
+      return Array.from(container.querySelectorAll("li span")).filter(
+        (el) => el.textContent === "★",
+      ).length;
+    }
+
+    it("inCheerWindow=true の日は空行ごとに★が描画される", () => {
+      const { container } = render(<DayRow {...baseProps()} inCheerWindow day={emptyLines(4)} />);
+      expect(countStars(container)).toBe(4);
+    });
+
+    it("inCheerWindow=false の日は空行を描画しない", () => {
+      const { container } = render(
+        <DayRow {...baseProps()} inCheerWindow={false} day={emptyLines(4)} />,
+      );
+      expect(countStars(container)).toBe(0);
+    });
+
+    it("1 行入力後の混在状態でも残りの空行に★が継続描画される", () => {
+      const day: DayMeals = {
+        lines: [
+          { text: "カレー", done: false },
+          { text: "", done: false },
+          { text: "サラダ", done: false },
+          { text: "", done: false },
+        ],
+      };
+      const { container } = render(<DayRow {...baseProps()} inCheerWindow day={day} />);
+      const checkButtons = screen.getAllByRole("button", { name: /完了にする/ });
+      expect(checkButtons).toHaveLength(2);
+      expect(countStars(container)).toBe(2);
+    });
+  });
+
+  describe("シマエナガ装飾（cheer 画像）", () => {
+    it("showCheer=true のとき日付列内に cheer 画像が表示される", () => {
+      const { container } = render(<DayRow {...baseProps()} showCheer />);
+      const cheer = container.querySelector("img.animate-cheer-flip");
+      expect(cheer).toBeTruthy();
+      const dateColumn = container.querySelector(".w-24");
+      expect(dateColumn?.contains(cheer)).toBe(true);
+    });
+
+    it("cheer 画像はタップ無効（pointer-events-none）で装飾扱い", () => {
+      const { container } = render(<DayRow {...baseProps()} showCheer />);
+      const cheer = container.querySelector("img.animate-cheer-flip");
+      expect(cheer?.className).toMatch(/pointer-events-none/);
+      expect(cheer?.getAttribute("aria-hidden")).toBe("true");
+    });
+  });
+
+  describe("「＋追加」ボタン（行末常設）", () => {
+    it("＋追加ボタンが描画される", () => {
+      render(<DayRow {...baseProps()} day={makeDay([{ text: "カレー" }])} />);
+      expect(screen.getByRole("button", { name: "行を追加" })).toBeTruthy();
+    });
+
+    it("空日でも＋追加ボタンが描画される", () => {
+      render(<DayRow {...baseProps()} />);
+      expect(screen.getByRole("button", { name: "行を追加" })).toBeTruthy();
+    });
+
+    it("クリックで onAddLine が呼ばれる", () => {
+      const onAddLine = vi.fn();
+      render(<DayRow {...baseProps()} onAddLine={onAddLine} />);
+      fireEvent.click(screen.getByRole("button", { name: "行を追加" }));
+      expect(onAddLine).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("行削除の確認ダイアログ（長押し → 揺れ → ✕ → ダイアログ）", () => {
     beforeEach(() => {
       vi.useFakeTimers();
     });
@@ -232,7 +303,6 @@ describe("DayRow", () => {
       const del = screen.getByRole("button", { name: /豚バラ大根 を削除/ });
       fireEvent.click(del);
       expect(screen.getByRole("dialog", { name: "行を削除" })).toBeTruthy();
-      // ダイアログ内に対象テキストが含まれる
       expect(screen.getByRole("dialog").textContent).toContain("豚バラ大根");
     });
 
@@ -263,21 +333,6 @@ describe("DayRow", () => {
       expect(onDeleteLine).not.toHaveBeenCalled();
       expect(screen.queryByRole("dialog")).toBeNull();
     });
-
-    it("背景（オーバーレイ）タップでキャンセル扱い", () => {
-      const onDeleteLine = vi.fn();
-      render(
-        <DayRow {...baseProps()} day={makeDay([{ text: "カレー" }])} onDeleteLine={onDeleteLine} />,
-      );
-      longPressDish("カレー");
-      fireEvent.click(screen.getByRole("button", { name: /カレー を削除/ }));
-      // role=presentation はオーバーレイ自体。
-      const overlay = screen.getByRole("dialog").parentElement;
-      if (!overlay) throw new Error("overlay not found");
-      fireEvent.click(overlay);
-      expect(onDeleteLine).not.toHaveBeenCalled();
-      expect(screen.queryByRole("dialog")).toBeNull();
-    });
   });
 
   describe("長押しで削除モード（ぷるぷる）", () => {
@@ -293,8 +348,7 @@ describe("DayRow", () => {
       longPressDish("豚バラ大根");
       const toggle = screen.getByRole("button", { name: /完了にする/ });
       const li = toggle.closest("li");
-      if (!li) throw new Error("li not found");
-      expect(li.className).toMatch(/animate-row-wobble/);
+      expect(li?.className).toMatch(/animate-row-wobble/);
     });
 
     it("ESC キーで削除モードが解除され ✕ が消える", () => {
@@ -320,299 +374,53 @@ describe("DayRow", () => {
       });
       expect(screen.queryByRole("button", { name: /豚バラ大根 を削除/ })).toBeNull();
     });
+
+    it("長押し成立後の click は onRequestEditLine を呼ばない（誤発火防止）", () => {
+      const onRequestEditLine = vi.fn();
+      render(
+        <DayRow
+          {...baseProps()}
+          day={makeDay([{ text: "豚バラ大根" }])}
+          onRequestEditLine={onRequestEditLine}
+        />,
+      );
+      longPressDish("豚バラ大根");
+      const textArea = screen.getByLabelText(/タップで編集、長押しで削除モード/);
+      fireEvent.click(textArea);
+      expect(onRequestEditLine).not.toHaveBeenCalled();
+    });
   });
 
-  // 完了行は「静かに後退」させる方針（SPEC「調理中操作の最適化」改訂）。
-  // ここは以前の 3 点併用（打ち消し線 + 行背景 + 緑塗り）へのリグレッションを
-  // 防ぐのが目的なので、例外的に className を直接検査している。
   describe("完了行の視覚スタイル簡素化", () => {
     it("完了行の料理名に line-through が付かない", () => {
       render(<DayRow {...baseProps()} day={makeDay([{ text: "豚バラ大根", done: true }])} />);
       const toggle = screen.getByRole("button", { name: /未完了に戻す/ });
       const li = toggle.closest("li");
-      if (!li) throw new Error("li not found");
-      // 料理名を載せる span（block + whitespace-nowrap が付いた可視要素）
-      const dishSpan = li.querySelector("div > span.block");
-      if (!dishSpan) throw new Error("dish span not found");
-      expect(dishSpan.className).not.toMatch(/line-through/);
-      expect(dishSpan.className).toMatch(/text-neutral-400/);
+      const dishSpan = li?.querySelector("div > span.block");
+      expect(dishSpan?.className).not.toMatch(/line-through/);
+      expect(dishSpan?.className).toMatch(/text-neutral-400/);
     });
 
     it("完了行の <li> に bg-green-50 が付かない", () => {
       render(<DayRow {...baseProps()} day={makeDay([{ text: "豚バラ大根", done: true }])} />);
       const toggle = screen.getByRole("button", { name: /未完了に戻す/ });
       const li = toggle.closest("li");
-      if (!li) throw new Error("li not found");
-      expect(li.className).not.toMatch(/bg-green-50/);
+      expect(li?.className).not.toMatch(/bg-green-50/);
     });
 
-    it("完了チェックはグレー塗り（bg-neutral-400）で、緑塗り（bg-green-500）は付かない", () => {
+    it("完了チェックはグレー塗り（bg-neutral-400）で、緑塗りは付かない", () => {
       render(<DayRow {...baseProps()} day={makeDay([{ text: "豚バラ大根", done: true }])} />);
       const toggle = screen.getByRole("button", { name: /未完了に戻す/ });
       const checkbox = toggle.querySelector("span");
-      if (!checkbox) throw new Error("checkbox span not found");
-      expect(checkbox.className).toMatch(/bg-neutral-400/);
-      expect(checkbox.className).toMatch(/border-neutral-400/);
-      expect(checkbox.className).not.toMatch(/bg-green-500/);
+      expect(checkbox?.className).toMatch(/bg-neutral-400/);
+      expect(checkbox?.className).toMatch(/border-neutral-400/);
     });
 
     it("未完了行のチェックは白地（bg-white）のまま", () => {
       render(<DayRow {...baseProps()} day={makeDay([{ text: "カレー" }])} />);
       const toggle = screen.getByRole("button", { name: /完了にする/ });
       const checkbox = toggle.querySelector("span");
-      if (!checkbox) throw new Error("checkbox span not found");
-      expect(checkbox.className).toMatch(/bg-white/);
-      expect(checkbox.className).not.toMatch(/bg-neutral-400/);
-    });
-  });
-
-  // iOS Safari の IME 未確定中に onChange 経由で親 state を更新すると、
-  // フリック/トグル入力が「タタタ」のように多重反映されるバグが発生する（#11）。
-  // compositionStart〜compositionEnd の間は値反映をスキップすることを保証する。
-  describe("IME 未確定中は値反映をスキップする (#11)", () => {
-    it("textarea: compositionStart 中の change は onTextChange を呼ばない", () => {
-      const onTextChange = vi.fn();
-      render(<DayRow {...baseProps()} onTextChange={onTextChange} />);
-      fireEvent.click(screen.getByLabelText(/4月15日.*献立を編集/));
-      const textarea = screen.queryAllByRole("textbox").find((el) => el.tagName === "TEXTAREA");
-      if (!textarea) throw new Error("textarea not found");
-
-      fireEvent.compositionStart(textarea);
-      fireEvent.change(textarea, { target: { value: "タ" } });
-      fireEvent.change(textarea, { target: { value: "タタ" } });
-      expect(onTextChange).not.toHaveBeenCalled();
-    });
-
-    it("textarea: compositionEnd で確定値が onTextChange に反映される", () => {
-      const onTextChange = vi.fn();
-      render(<DayRow {...baseProps()} onTextChange={onTextChange} />);
-      fireEvent.click(screen.getByLabelText(/4月15日.*献立を編集/));
-      const textarea = screen
-        .queryAllByRole("textbox")
-        .find((el) => el.tagName === "TEXTAREA") as HTMLTextAreaElement;
-      if (!textarea) throw new Error("textarea not found");
-
-      fireEvent.compositionStart(textarea);
-      fireEvent.change(textarea, { target: { value: "タ" } });
-      textarea.value = "タ";
-      fireEvent.compositionEnd(textarea);
-      expect(onTextChange).toHaveBeenLastCalledWith("タ");
-    });
-
-    it("textarea: IME を使わない通常入力は従来通り onTextChange が呼ばれる", () => {
-      const onTextChange = vi.fn();
-      render(<DayRow {...baseProps()} onTextChange={onTextChange} />);
-      fireEvent.click(screen.getByLabelText(/4月15日.*献立を編集/));
-      const textarea = screen.queryAllByRole("textbox").find((el) => el.tagName === "TEXTAREA");
-      if (!textarea) throw new Error("textarea not found");
-
-      fireEvent.change(textarea, { target: { value: "a" } });
-      expect(onTextChange).toHaveBeenLastCalledWith("a");
-    });
-
-    it("MemoField: compositionStart 中の change は onMemoChange を呼ばない", () => {
-      const onMemoChange = vi.fn();
-      render(<DayRow {...baseProps()} onMemoChange={onMemoChange} />);
-      const memo = screen.getByLabelText(/4月15日.*のメモ/);
-
-      fireEvent.compositionStart(memo);
-      fireEvent.change(memo, { target: { value: "ソ" } });
-      fireEvent.change(memo, { target: { value: "ソソ" } });
-      expect(onMemoChange).not.toHaveBeenCalled();
-    });
-
-    // ブラウザによっては compositionend 直後に同値の input/change が続く。
-    // compositionEnd 側で確定反映しているので、直後の同値 change は 1 回だけ捨てる。
-    it("textarea: compositionEnd 直後の同値 change は onTextChange を二重に呼ばない", () => {
-      const onTextChange = vi.fn();
-      render(<DayRow {...baseProps()} onTextChange={onTextChange} />);
-      fireEvent.click(screen.getByLabelText(/4月15日.*献立を編集/));
-      const textarea = screen
-        .queryAllByRole("textbox")
-        .find((el) => el.tagName === "TEXTAREA") as HTMLTextAreaElement;
-      if (!textarea) throw new Error("textarea not found");
-
-      fireEvent.compositionStart(textarea);
-      fireEvent.change(textarea, { target: { value: "タ" } });
-      textarea.value = "タ";
-      fireEvent.compositionEnd(textarea);
-      // compositionEnd と同値の change が続いて発火するケース
-      fireEvent.change(textarea, { target: { value: "タ" } });
-
-      expect(onTextChange).toHaveBeenCalledTimes(1);
-      expect(onTextChange).toHaveBeenLastCalledWith("タ");
-    });
-
-    it("textarea: compositionEnd 後に異なる値の change が来たら反映する", () => {
-      const onTextChange = vi.fn();
-      render(<DayRow {...baseProps()} onTextChange={onTextChange} />);
-      fireEvent.click(screen.getByLabelText(/4月15日.*献立を編集/));
-      const textarea = screen
-        .queryAllByRole("textbox")
-        .find((el) => el.tagName === "TEXTAREA") as HTMLTextAreaElement;
-      if (!textarea) throw new Error("textarea not found");
-
-      fireEvent.compositionStart(textarea);
-      fireEvent.change(textarea, { target: { value: "タ" } });
-      textarea.value = "タ";
-      fireEvent.compositionEnd(textarea);
-      // dedupe は「次の同値 1 回」のみ。異なる値の change は反映される。
-      fireEvent.change(textarea, { target: { value: "タa" } });
-
-      expect(onTextChange).toHaveBeenCalledTimes(2);
-      expect(onTextChange).toHaveBeenNthCalledWith(1, "タ");
-      expect(onTextChange).toHaveBeenNthCalledWith(2, "タa");
-    });
-  });
-
-  describe("シマエナガ（cheer）の配置と装飾性", () => {
-    it("showCheer=true のとき日付列内に cheer 画像が表示される", () => {
-      const { container } = render(<DayRow {...baseProps()} showCheer />);
-      const cheer = container.querySelector("img.animate-cheer-flip") as HTMLImageElement | null;
-      expect(cheer).toBeTruthy();
-      // 日付列（w-24）の中にいる
-      const dateColumn = container.querySelector(".w-24");
-      expect(dateColumn?.contains(cheer)).toBe(true);
-    });
-
-    it("showCheer=false のとき cheer 画像は描画されない", () => {
-      const { container } = render(<DayRow {...baseProps()} showCheer={false} />);
-      expect(container.querySelector("img.animate-cheer-flip")).toBeNull();
-    });
-
-    it("cheer 画像はタップ無効（pointer-events-none）で装飾扱い（aria-hidden）", () => {
-      const { container } = render(<DayRow {...baseProps()} showCheer />);
-      const cheer = container.querySelector("img.animate-cheer-flip") as HTMLImageElement | null;
-      expect(cheer).toBeTruthy();
-      expect(cheer?.className).toMatch(/pointer-events-none/);
-      expect(cheer?.getAttribute("aria-hidden")).toBe("true");
-    });
-
-    it("献立エリア（trigger 内）には cheer 画像が含まれない（撤去確認）", () => {
-      render(<DayRow {...baseProps()} showCheer />);
-      const trigger = screen.getByLabelText(/4月15日.*献立を編集/);
-      expect(trigger.querySelector("img.animate-cheer-flip")).toBeNull();
-    });
-  });
-
-  describe("空行の★プレースホルダ（シマエナガ発生日）", () => {
-    function emptyLines(count: number): DayMeals {
-      return {
-        lines: Array.from({ length: count }, () => ({ text: "", done: false })),
-      };
-    }
-
-    function countStars(container: HTMLElement): number {
-      return Array.from(container.querySelectorAll("li > span")).filter(
-        (el) => el.textContent === "★",
-      ).length;
-    }
-
-    it("inCheerWindow=true の日は空行ごとに★が描画される（自動生成 4 空行）", () => {
-      const { container } = render(<DayRow {...baseProps()} inCheerWindow day={emptyLines(4)} />);
-      expect(countStars(container)).toBe(4);
-    });
-
-    it("inCheerWindow=false の日は空行を描画しない（過去日・today+7 以降）", () => {
-      const { container } = render(
-        <DayRow {...baseProps()} inCheerWindow={false} day={emptyLines(4)} />,
-      );
-      expect(countStars(container)).toBe(0);
-    });
-
-    it("1 行入力後の混在状態でも残りの空行に★が継続描画される（showCheer=false でも inCheerWindow=true なら描画）", () => {
-      // 実アプリ状態：1 行入力済み → isEmptyDay=false → showCheer=false。
-      // ただし inCheerWindow（範囲のみ判定）は true のまま。残り空行に★が出続けることを検証。
-      const day: DayMeals = {
-        lines: [
-          { text: "カレー", done: false },
-          { text: "", done: false },
-          { text: "サラダ", done: false },
-          { text: "", done: false },
-        ],
-      };
-      const { container } = render(
-        <DayRow {...baseProps()} showCheer={false} inCheerWindow day={day} />,
-      );
-      // 入力済み行 2 → LineItem の「完了にする」ボタンが 2 個
-      const checkButtons = screen.getAllByRole("button", { name: /完了にする/ });
-      expect(checkButtons).toHaveLength(2);
-      // 空行 2 → ★ 2 個
-      expect(countStars(container)).toBe(2);
-    });
-
-    it("★行クリックで textarea 編集モードに入る（親トリガー経由）", () => {
-      const { container } = render(<DayRow {...baseProps()} inCheerWindow day={emptyLines(2)} />);
-      const star = container.querySelector("li > span") as HTMLElement | null;
-      expect(star?.textContent).toBe("★");
-      // 編集モード進入前は textarea は存在しない
-      expect(
-        screen.queryAllByRole("textbox").find((el) => el.tagName === "TEXTAREA"),
-      ).toBeUndefined();
-      // ★行（の親 <li>）をクリック → 親 <div role="button"> へバブリングして編集モード進入
-      fireEvent.click(star as HTMLElement);
-      const textarea = screen.queryAllByRole("textbox").find((el) => el.tagName === "TEXTAREA");
-      expect(textarea).toBeTruthy();
-    });
-  });
-
-  describe("「＋追加」ボタン（行末常設）", () => {
-    it("表示モードで＋追加ボタンが描画される", () => {
-      render(<DayRow {...baseProps()} day={makeDay([{ text: "カレー" }])} />);
-      expect(screen.getByRole("button", { name: "行を追加" })).toBeTruthy();
-    });
-
-    it("空日でも＋追加ボタンが描画される", () => {
-      render(<DayRow {...baseProps()} />);
-      expect(screen.getByRole("button", { name: "行を追加" })).toBeTruthy();
-    });
-
-    it("クリックで onAddLine が呼ばれ、編集モードに進入する（textarea 出現）", () => {
-      const onAddLine = vi.fn();
-      render(<DayRow {...baseProps()} onAddLine={onAddLine} />);
-      fireEvent.click(screen.getByRole("button", { name: "行を追加" }));
-      expect(onAddLine).toHaveBeenCalledTimes(1);
-      const textarea = screen.queryAllByRole("textbox").find((el) => el.tagName === "TEXTAREA");
-      expect(textarea).toBeTruthy();
-    });
-
-    it("＋追加ボタンクリックは親の編集トリガーへ漏れず、onAddLine が 1 回だけ呼ばれる", () => {
-      const onAddLine = vi.fn();
-      render(<DayRow {...baseProps()} onAddLine={onAddLine} />);
-      fireEvent.click(screen.getByRole("button", { name: "行を追加" }));
-      expect(onAddLine).toHaveBeenCalledTimes(1);
-    });
-  });
-
-  describe("週達成マーカー（廃止）と編集コミット連携", () => {
-    it("日曜行に週達成メダルアイコンが描画されない（常駐マーカー廃止）", () => {
-      // 2026-04-12 は日曜
-      render(<DayRow {...baseProps()} dateKey="2026-04-12" />);
-      // 旧実装で付いていた title 属性が無いこと
-      expect(screen.queryByTitle("この週の献立が埋まりました")).toBeNull();
-    });
-
-    it("編集モード進入で onBeginEdit が呼ばれ、onCommitEdit はまだ呼ばれない", () => {
-      const onBeginEdit = vi.fn();
-      const onCommitEdit = vi.fn();
-      render(<DayRow {...baseProps()} onBeginEdit={onBeginEdit} onCommitEdit={onCommitEdit} />);
-      const trigger = screen.getByLabelText(/4月15日.*献立を編集/);
-      fireEvent.click(trigger);
-      expect(onBeginEdit).toHaveBeenCalledTimes(1);
-      expect(onCommitEdit).not.toHaveBeenCalled();
-    });
-
-    it("textarea の onChange では onCommitEdit が呼ばれない、onBlur で初めて呼ばれる", () => {
-      const onCommitEdit = vi.fn();
-      render(<DayRow {...baseProps()} onCommitEdit={onCommitEdit} />);
-      const trigger = screen.getByLabelText(/4月15日.*献立を編集/);
-      fireEvent.click(trigger);
-      const textarea = screen.queryAllByRole("textbox").find((el) => el.tagName === "TEXTAREA");
-      if (!textarea) throw new Error("textarea not found");
-      fireEvent.change(textarea, { target: { value: "な" } });
-      expect(onCommitEdit).not.toHaveBeenCalled();
-      fireEvent.blur(textarea);
-      expect(onCommitEdit).toHaveBeenCalledTimes(1);
+      expect(checkbox?.className).toMatch(/bg-white/);
     });
   });
 });

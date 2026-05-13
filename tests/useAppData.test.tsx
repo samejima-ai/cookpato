@@ -80,6 +80,96 @@ describe("useAppData", () => {
     });
   });
 
+  describe("updateLineAt（行単位の text 更新、F011 経由）", () => {
+    it("指定行の text を更新できる", () => {
+      const { result } = renderHook(() => useAppData());
+      act(() => {
+        result.current.setMealsText("2030-01-01", "カレー\nサラダ");
+      });
+      act(() => {
+        result.current.updateLineAt("2030-01-01", 1, "コールスロー");
+      });
+      const lines = result.current.data.meals["2030-01-01"]?.lines ?? [];
+      expect(lines.map((l) => l.text)).toEqual(["カレー", "コールスロー"]);
+    });
+
+    it("テキスト変更時は done が false にリセットされる（textToLines と同意味論）", () => {
+      const { result } = renderHook(() => useAppData());
+      act(() => {
+        result.current.setMealsText("2030-01-01", "カレー");
+      });
+      act(() => {
+        result.current.toggleLine("2030-01-01", 0);
+      });
+      expect(result.current.data.meals["2030-01-01"]?.lines[0]?.done).toBe(true);
+      act(() => {
+        result.current.updateLineAt("2030-01-01", 0, "シチュー");
+      });
+      expect(result.current.data.meals["2030-01-01"]?.lines[0]?.done).toBe(false);
+    });
+
+    it("テキスト変更時は cart が解除される", () => {
+      const { result } = renderHook(() => useAppData());
+      act(() => {
+        result.current.setMealsText("2030-01-01", "カレー");
+      });
+      act(() => {
+        result.current.toggleCart("2030-01-01", 0);
+      });
+      expect(result.current.data.meals["2030-01-01"]?.lines[0]?.cart).toBe(true);
+      act(() => {
+        result.current.updateLineAt("2030-01-01", 0, "シチュー");
+      });
+      expect(result.current.data.meals["2030-01-01"]?.lines[0]?.cart).toBeUndefined();
+    });
+
+    it("同じテキストを渡すと state 識別子が変わらない（no-op）", () => {
+      const { result } = renderHook(() => useAppData());
+      act(() => {
+        result.current.setMealsText("2030-01-01", "カレー");
+      });
+      const before = result.current.data.meals["2030-01-01"];
+      act(() => {
+        result.current.updateLineAt("2030-01-01", 0, "カレー");
+      });
+      expect(result.current.data.meals["2030-01-01"]).toBe(before);
+    });
+
+    it("範囲外 index は no-op", () => {
+      const { result } = renderHook(() => useAppData());
+      act(() => {
+        result.current.setMealsText("2030-01-01", "カレー");
+      });
+      act(() => {
+        result.current.updateLineAt("2030-01-01", 5, "存在しない");
+      });
+      expect(result.current.data.meals["2030-01-01"]?.lines.length).toBe(1);
+    });
+
+    it("更新の結果、全行 text==='' + memo なしになると日付が削除される", () => {
+      const { result } = renderHook(() => useAppData());
+      act(() => {
+        result.current.setMealsText("2030-01-01", "カレー");
+      });
+      act(() => {
+        result.current.updateLineAt("2030-01-01", 0, "");
+      });
+      expect(result.current.data.meals["2030-01-01"]).toBeUndefined();
+    });
+
+    it("memo が残っていれば、全行空にしても日付は残る", () => {
+      const { result } = renderHook(() => useAppData());
+      act(() => {
+        result.current.setMealsText("2030-01-01", "カレー");
+        result.current.setMemo("2030-01-01", "外食");
+      });
+      act(() => {
+        result.current.updateLineAt("2030-01-01", 0, "");
+      });
+      expect(result.current.data.meals["2030-01-01"]?.memo).toBe("外食");
+    });
+  });
+
   describe("addLineAt（行末追加）", () => {
     it("空日に呼ぶと空行が 1 つ末尾に append される", () => {
       const { result } = renderHook(() => useAppData());
