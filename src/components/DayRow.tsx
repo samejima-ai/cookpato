@@ -27,16 +27,30 @@ type Props = {
   editingLineIndex: number | null;
   /** 現在フロート編集中の対象が自分の日付のメモなら true */
   isMemoEditing: boolean;
+  /** F012: この日が「移動モードの移動元」か（青枠強調） */
+  isSwapSource: boolean;
+  /** F012: スワップ移動モードが（他の日が起点で）アクティブか。タップで目的日になり得る */
+  isSwapTarget: boolean;
+  /** F012: スワップ完了後の短時間フラッシュ表示中か */
+  isSwapFlash: boolean;
   onToggleLine: (lineIndex: number) => void;
   onToggleFavorite: (lineIndex: number) => void;
   onToggleCart: (lineIndex: number) => void;
   onDeleteLine: (lineIndex: number) => void;
+  /** F013: 対象行の「上」または「下」に空行を挿入し即フロート編集を起動する */
+  onInsertLineAt: (lineIndex: number, where: "above" | "below") => void;
   /** 「＋追加」ボタン押下時：空 Line を append + 即座にフロートで編集する */
   onAddLine: () => void;
   /** 行タップ：その行を FloatingEditor で編集する */
   onRequestEditLine: (lineIndex: number) => void;
   /** ちょいメモタップ：メモを FloatingEditor で編集する */
   onRequestEditMemo: () => void;
+  /** F012: 料理行 wobble 進入時に呼ぶ（移動モードを解除するため親へ通知） */
+  onLineWobbleEnter: () => void;
+  /** F012: 日付ラベル領域の 500ms 長押し → 移動モード開始（または同じ日なら解除） */
+  onLongPressDate: () => void;
+  /** F012: 移動モード中の日付ラベルタップ → スワップ実行（または同じ日なら解除） */
+  onTapDate: () => void;
 };
 
 export function DayRow({
@@ -48,13 +62,20 @@ export function DayRow({
   favoriteKeys,
   editingLineIndex,
   isMemoEditing,
+  isSwapSource,
+  isSwapTarget,
+  isSwapFlash,
   onToggleLine,
   onToggleFavorite,
   onToggleCart,
   onDeleteLine,
+  onInsertLineAt,
   onAddLine,
   onRequestEditLine,
   onRequestEditMemo,
+  onLineWobbleEnter,
+  onLongPressDate,
+  onTapDate,
 }: Props) {
   const [pendingDelete, setPendingDelete] = useState<number | null>(null);
   // 行削除モード（長押しで突入）中の対象行 index。null は非アクティブ。
@@ -92,6 +113,15 @@ export function DayRow({
 
   const bgClass = isToday ? "bg-yellow-50" : "bg-white";
 
+  // 日付ラベル領域の長押し：F012 移動モードのトリガー。LineItem 同様、
+  // 長押し成立後の click は内部 flag で抑止する（onTapDate 誤発火を防ぐ）。
+  const dateWasLongPressRef = useRef(false);
+  const dateLp = useLongPress(() => {
+    dateWasLongPressRef.current = true;
+    tapFeedback();
+    onLongPressDate();
+  });
+
   const pendingText = pendingDelete !== null ? (lines[pendingDelete]?.text ?? "") : "";
 
   const handleAddLine = (e: React.MouseEvent) => {
@@ -103,11 +133,52 @@ export function DayRow({
   return (
     <div className={`flex gap-3 px-3 py-2 border-b border-neutral-100 ${bgClass}`}>
       <div className="w-24 shrink-0">
-        <div className={`text-sm font-medium ${labelColor}`}>
-          <span>{formatDayLabel(dateKey)}</span>
+        {/* 日付ラベル領域：M月D日 + 祝日名 + 今日バッジを 1 つの長押し領域にまとめる（F012） */}
+        {/* biome-ignore lint/a11y/useSemanticElements: 内部の MemoField 等とのネスト回避で div + role=button を採用（LineItem 料理名と同じパターン） */}
+        <div
+          role="button"
+          tabIndex={0}
+          aria-label={`${formatDayLabel(dateKey)}（長押しで日付ごと入れ替え）`}
+          className={`rounded transition-colors ${
+            isSwapSource ? "bg-blue-50 ring-2 ring-blue-300" : isSwapFlash ? "bg-green-50" : ""
+          }`}
+          onMouseDown={() => {
+            dateWasLongPressRef.current = false;
+            dateLp.onMouseDown();
+          }}
+          onMouseUp={dateLp.onMouseUp}
+          onMouseLeave={dateLp.onMouseLeave}
+          onTouchStart={() => {
+            dateWasLongPressRef.current = false;
+            dateLp.onTouchStart();
+          }}
+          onTouchEnd={dateLp.onTouchEnd}
+          onTouchCancel={dateLp.onTouchCancel}
+          onClick={(e) => {
+            // 長押し成立後の click は抑止
+            if (dateWasLongPressRef.current) {
+              dateWasLongPressRef.current = false;
+              e.stopPropagation();
+              return;
+            }
+            // 移動モード中（自分が source または target）のみ反応する
+            if (isSwapSource || isSwapTarget) {
+              onTapDate();
+            }
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              if (isSwapSource || isSwapTarget) onTapDate();
+            }
+          }}
+        >
+          <div className={`text-sm font-medium ${labelColor}`}>
+            <span>{formatDayLabel(dateKey)}</span>
+          </div>
+          {holidayName && <HolidayLabel name={holidayName} />}
+          {isToday && <div className="text-xs text-yellow-700 mt-0.5">今日</div>}
         </div>
-        {holidayName && <HolidayLabel name={holidayName} />}
-        {isToday && <div className="text-xs text-yellow-700 mt-0.5">今日</div>}
         {/* シマエナガ（cheer）：日付列内の装飾要素。タップ無効。 */}
         {showCheer && (
           <img
@@ -157,10 +228,22 @@ export function DayRow({
                 onToggleFavorite={() => onToggleFavorite(idx)}
                 onToggleCart={() => onToggleCart(idx)}
                 onTap={() => onRequestEditLine(idx)}
-                onLongPress={() => setWobbleIndex(idx)}
+                onLongPress={() => {
+                  setWobbleIndex(idx);
+                  // F012: 料理行 wobble 進入時はスワップ移動モードを解除する
+                  onLineWobbleEnter();
+                }}
                 onRequestDelete={() => {
                   setWobbleIndex(null);
                   setPendingDelete(idx);
+                }}
+                onInsertAbove={() => {
+                  setWobbleIndex(null);
+                  onInsertLineAt(idx, "above");
+                }}
+                onInsertBelow={() => {
+                  setWobbleIndex(null);
+                  onInsertLineAt(idx, "below");
                 }}
               />
             );
@@ -228,7 +311,7 @@ type LineItemProps = {
   favorite: boolean;
   /** 買い物マーカー（行ごと、妻の手動視覚マーキング） */
   cart: boolean;
-  /** 削除モード（長押し突入）中か。true の間だけ ✕ ボタンを表示＋行を揺らす。 */
+  /** 長押しメニューモード（旧称: 削除モード）か。true の間は ↑+/↓+/✕ を表示＋行を揺らす。 */
   wobble: boolean;
   /** この行が FloatingEditor で編集中か（薄い背景色ハイライト） */
   isEditing: boolean;
@@ -242,6 +325,10 @@ type LineItemProps = {
   /** 料理名エリアを長押しされたとき。親は対応行を wobble 状態に遷移させる。 */
   onLongPress: () => void;
   onRequestDelete: () => void;
+  /** F013: この行の直上に空行を挿入してフロート編集を起動する */
+  onInsertAbove: () => void;
+  /** F013: この行の直下に空行を挿入してフロート編集を起動する */
+  onInsertBelow: () => void;
 };
 
 /**
@@ -273,6 +360,8 @@ function LineItem({
   onTap,
   onLongPress,
   onRequestDelete,
+  onInsertAbove,
+  onInsertBelow,
 }: LineItemProps) {
   const handleToggle = useDebouncedTap((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -388,41 +477,71 @@ function LineItem({
           {text}
         </span>
       </div>
-      <button
-        type="button"
-        onClick={handleCart}
-        className="w-11 h-11 flex items-center justify-center shrink-0"
-        aria-label={cart ? "買い物マーク解除" : "買い物マークを付ける"}
-        aria-pressed={cart}
-      >
-        {cart ? (
-          <img src={cartImg} alt="" aria-hidden="true" className="w-10 h-10" />
-        ) : (
-          <span className="w-5 h-5 text-base leading-none opacity-30">🛒</span>
-        )}
-      </button>
-      <button
-        type="button"
-        onClick={handleFavorite}
-        className="w-11 h-11 flex items-center justify-center shrink-0"
-        aria-label={favorite ? "お気に入り解除" : "お気に入りに追加"}
-        aria-pressed={favorite}
-      >
-        {favorite ? (
-          <img src={favoriteImg} alt="" aria-hidden="true" className="w-10 h-10" />
-        ) : (
-          <span className="w-5 h-5 text-neutral-300 text-base leading-none">♡</span>
-        )}
-      </button>
-      {wobble && (
-        <button
-          type="button"
-          onClick={handleDelete}
-          className="w-11 h-11 flex items-center justify-center shrink-0 text-neutral-300 active:text-red-500 text-lg"
-          aria-label={`${text} を削除`}
-        >
-          ✕
-        </button>
+      {/* wobble 中は ↑+/↓+/✕ を表示し、🛒/♡ は隠す（F013 行間挿入仕様） */}
+      {wobble ? (
+        <>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              tapFeedback();
+              onInsertAbove();
+            }}
+            className="w-11 h-11 flex items-center justify-center shrink-0 text-neutral-400 active:text-blue-500 text-base"
+            aria-label={`${text} の上に行を追加`}
+          >
+            ↑＋
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              tapFeedback();
+              onInsertBelow();
+            }}
+            className="w-11 h-11 flex items-center justify-center shrink-0 text-neutral-400 active:text-blue-500 text-base"
+            aria-label={`${text} の下に行を追加`}
+          >
+            ↓＋
+          </button>
+          <button
+            type="button"
+            onClick={handleDelete}
+            className="w-11 h-11 flex items-center justify-center shrink-0 text-neutral-300 active:text-red-500 text-lg"
+            aria-label={`${text} を削除`}
+          >
+            ✕
+          </button>
+        </>
+      ) : (
+        <>
+          <button
+            type="button"
+            onClick={handleCart}
+            className="w-11 h-11 flex items-center justify-center shrink-0"
+            aria-label={cart ? "買い物マーク解除" : "買い物マークを付ける"}
+            aria-pressed={cart}
+          >
+            {cart ? (
+              <img src={cartImg} alt="" aria-hidden="true" className="w-10 h-10" />
+            ) : (
+              <span className="w-5 h-5 text-base leading-none opacity-30">🛒</span>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={handleFavorite}
+            className="w-11 h-11 flex items-center justify-center shrink-0"
+            aria-label={favorite ? "お気に入り解除" : "お気に入りに追加"}
+            aria-pressed={favorite}
+          >
+            {favorite ? (
+              <img src={favoriteImg} alt="" aria-hidden="true" className="w-10 h-10" />
+            ) : (
+              <span className="w-5 h-5 text-neutral-300 text-base leading-none">♡</span>
+            )}
+          </button>
+        </>
       )}
     </li>
   );

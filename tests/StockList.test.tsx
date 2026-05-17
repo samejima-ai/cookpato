@@ -35,6 +35,8 @@ function makeApi(overrides?: Partial<AppDataApi>): AppDataApi {
     setMemo: vi.fn(),
     toggleLine: vi.fn(),
     deleteLine: vi.fn(),
+    insertLineAt: vi.fn(() => -1),
+    swapDays: vi.fn(),
     toggleFavorite: vi.fn(),
     toggleCart: vi.fn(),
     addStock: vi.fn(),

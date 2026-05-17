@@ -1018,4 +1018,321 @@ describe("useAppData", () => {
       expect(result.current.data.completedWeeks).toEqual([]);
     });
   });
+
+  describe("insertLineAt（F013 行間挿入）", () => {
+    it("対象行の上に空行を挿入する（戻り値は挿入された行 index）", () => {
+      const { result } = renderHook(() => useAppData());
+      act(() => {
+        result.current.setMealsText("2030-01-01", "カレー\nサラダ\nスープ");
+      });
+      let insertedAt = -1;
+      act(() => {
+        insertedAt = result.current.insertLineAt("2030-01-01", 1, "above");
+      });
+      const lines = result.current.data.meals["2030-01-01"]?.lines ?? [];
+      expect(lines.map((l) => l.text)).toEqual(["カレー", "", "サラダ", "スープ"]);
+      expect(insertedAt).toBe(1);
+    });
+
+    it("対象行の下に空行を挿入する", () => {
+      const { result } = renderHook(() => useAppData());
+      act(() => {
+        result.current.setMealsText("2030-01-01", "カレー\nサラダ\nスープ");
+      });
+      let insertedAt = -1;
+      act(() => {
+        insertedAt = result.current.insertLineAt("2030-01-01", 1, "below");
+      });
+      const lines = result.current.data.meals["2030-01-01"]?.lines ?? [];
+      expect(lines.map((l) => l.text)).toEqual(["カレー", "サラダ", "", "スープ"]);
+      expect(insertedAt).toBe(2);
+    });
+
+    it("先頭行の上への挿入：index 0 が新空行になる", () => {
+      const { result } = renderHook(() => useAppData());
+      act(() => {
+        result.current.setMealsText("2030-01-01", "カレー");
+      });
+      let insertedAt = -1;
+      act(() => {
+        insertedAt = result.current.insertLineAt("2030-01-01", 0, "above");
+      });
+      expect(result.current.data.meals["2030-01-01"]?.lines.map((l) => l.text)).toEqual([
+        "",
+        "カレー",
+      ]);
+      expect(insertedAt).toBe(0);
+    });
+
+    it("末尾行の下への挿入：＋追加と等価に末尾に空行が積まれる", () => {
+      const { result } = renderHook(() => useAppData());
+      act(() => {
+        result.current.setMealsText("2030-01-01", "カレー\nサラダ");
+      });
+      let insertedAt = -1;
+      act(() => {
+        insertedAt = result.current.insertLineAt("2030-01-01", 1, "below");
+      });
+      expect(result.current.data.meals["2030-01-01"]?.lines.map((l) => l.text)).toEqual([
+        "カレー",
+        "サラダ",
+        "",
+      ]);
+      expect(insertedAt).toBe(2);
+    });
+
+    it("対象行の done / cart は変化しない", () => {
+      const { result } = renderHook(() => useAppData());
+      act(() => {
+        result.current.setMealsText("2030-01-01", "カレー\nサラダ");
+        result.current.toggleLine("2030-01-01", 0);
+        result.current.toggleCart("2030-01-01", 1);
+      });
+      act(() => {
+        result.current.insertLineAt("2030-01-01", 0, "below");
+      });
+      const lines = result.current.data.meals["2030-01-01"]?.lines ?? [];
+      // 挿入後の構造: [カレー(done), 空, サラダ(cart)]
+      expect(lines[0]?.done).toBe(true);
+      expect(lines[1]?.text).toBe("");
+      expect(lines[1]?.done).toBe(false);
+      expect(lines[2]?.text).toBe("サラダ");
+      expect(lines[2]?.cart).toBe(true);
+    });
+
+    it("memo は保持される", () => {
+      const { result } = renderHook(() => useAppData());
+      act(() => {
+        result.current.setMealsText("2030-01-01", "カレー");
+        result.current.setMemo("2030-01-01", "外食");
+      });
+      act(() => {
+        result.current.insertLineAt("2030-01-01", 0, "below");
+      });
+      expect(result.current.data.meals["2030-01-01"]?.memo).toBe("外食");
+    });
+
+    it("行が無い日に呼ぶと先頭に空行が 1 つ生まれる", () => {
+      const { result } = renderHook(() => useAppData());
+      let insertedAt = -1;
+      act(() => {
+        insertedAt = result.current.insertLineAt("2030-12-31", 0, "above");
+      });
+      expect(result.current.data.meals["2030-12-31"]?.lines.length).toBe(1);
+      expect(insertedAt).toBe(0);
+    });
+  });
+
+  describe("swapDays（F012 日付ごとスワップ）", () => {
+    it("lines を双方向入れ替える", () => {
+      const { result } = renderHook(() => useAppData());
+      act(() => {
+        result.current.setMealsText("2030-01-01", "カレー\nサラダ");
+        result.current.setMealsText("2030-01-02", "親子丼");
+      });
+      act(() => {
+        result.current.swapDays("2030-01-01", "2030-01-02");
+      });
+      expect(result.current.data.meals["2030-01-01"]?.lines.map((l) => l.text)).toEqual(["親子丼"]);
+      expect(result.current.data.meals["2030-01-02"]?.lines.map((l) => l.text)).toEqual([
+        "カレー",
+        "サラダ",
+      ]);
+    });
+
+    it("memo も入れ替わる", () => {
+      const { result } = renderHook(() => useAppData());
+      act(() => {
+        result.current.setMealsText("2030-01-01", "カレー");
+        result.current.setMemo("2030-01-01", "早め");
+        result.current.setMealsText("2030-01-02", "親子丼");
+        result.current.setMemo("2030-01-02", "外食");
+      });
+      act(() => {
+        result.current.swapDays("2030-01-01", "2030-01-02");
+      });
+      expect(result.current.data.meals["2030-01-01"]?.memo).toBe("外食");
+      expect(result.current.data.meals["2030-01-02"]?.memo).toBe("早め");
+    });
+
+    it("done / cart も lines と一緒に移動する", () => {
+      const { result } = renderHook(() => useAppData());
+      act(() => {
+        result.current.setMealsText("2030-01-01", "カレー");
+        result.current.toggleLine("2030-01-01", 0);
+        result.current.toggleCart("2030-01-01", 0);
+        result.current.setMealsText("2030-01-02", "親子丼");
+      });
+      act(() => {
+        result.current.swapDays("2030-01-01", "2030-01-02");
+      });
+      expect(result.current.data.meals["2030-01-02"]?.lines[0]?.text).toBe("カレー");
+      expect(result.current.data.meals["2030-01-02"]?.lines[0]?.done).toBe(true);
+      expect(result.current.data.meals["2030-01-02"]?.lines[0]?.cart).toBe(true);
+      expect(result.current.data.meals["2030-01-01"]?.lines[0]?.text).toBe("親子丼");
+      expect(result.current.data.meals["2030-01-01"]?.lines[0]?.done).toBe(false);
+    });
+
+    it("空日 ↔ 入力日のスワップ：空日が入力日の中身を受け取り、入力日は空日になる", () => {
+      const { result } = renderHook(() => useAppData());
+      act(() => {
+        result.current.setMealsText("2030-01-01", "カレー");
+        // 2030-01-02 は未定義（完全な空日）
+      });
+      act(() => {
+        result.current.swapDays("2030-01-01", "2030-01-02");
+      });
+      expect(result.current.data.meals["2030-01-01"]).toBeUndefined();
+      expect(result.current.data.meals["2030-01-02"]?.lines.map((l) => l.text)).toEqual(["カレー"]);
+    });
+
+    it("両方空日ならノーオペ（state 識別子が変わらない）", () => {
+      const { result } = renderHook(() => useAppData());
+      // 2030-01-01 / 2030-01-02 とも未定義
+      const before = result.current.data.meals;
+      act(() => {
+        result.current.swapDays("2030-01-01", "2030-01-02");
+      });
+      expect(result.current.data.meals).toBe(before);
+    });
+
+    it("同日指定はノーオペ", () => {
+      const { result } = renderHook(() => useAppData());
+      act(() => {
+        result.current.setMealsText("2030-01-01", "カレー");
+      });
+      const before = result.current.data.meals;
+      act(() => {
+        result.current.swapDays("2030-01-01", "2030-01-01");
+      });
+      expect(result.current.data.meals).toBe(before);
+    });
+
+    it("スワップは可逆：2 度実行すると元に戻る", () => {
+      const { result } = renderHook(() => useAppData());
+      act(() => {
+        result.current.setMealsText("2030-01-01", "カレー");
+        result.current.setMealsText("2030-01-02", "親子丼");
+      });
+      act(() => {
+        result.current.swapDays("2030-01-01", "2030-01-02");
+        result.current.swapDays("2030-01-01", "2030-01-02");
+      });
+      expect(result.current.data.meals["2030-01-01"]?.lines[0]?.text).toBe("カレー");
+      expect(result.current.data.meals["2030-01-02"]?.lines[0]?.text).toBe("親子丼");
+    });
+
+    it("週達成 union：スワップで新たに完成した週は completedWeeks に追加される", () => {
+      // 2030-01-06（日）〜2030-01-12（土）の週を題材にする
+      // 日〜金（6 日）に料理あり、土曜だけ空。土曜と翌週日曜（空）をスワップしても何も変わらない、
+      // ではなく、6 日分入った週の空き 1 日に、別週の入力日（料理あり）を持ってきて週完成を作る。
+      const { result } = renderHook(() => useAppData());
+      const week = [
+        "2030-01-06",
+        "2030-01-07",
+        "2030-01-08",
+        "2030-01-09",
+        "2030-01-10",
+        "2030-01-11",
+      ];
+      act(() => {
+        for (const d of week) result.current.setMealsText(d, "ごはん");
+        // 土曜 2030-01-12 は空のまま
+        // 翌週 2030-01-13（日）に料理ありを置く
+        result.current.setMealsText("2030-01-13", "ごちそう");
+      });
+      // 2030-01-12（土・空） ↔ 2030-01-13（日・料理）をスワップ → 土曜が埋まり、当該週完成
+      act(() => {
+        result.current.swapDays("2030-01-12", "2030-01-13");
+      });
+      // 元週（2030-01-06 を含む週、日曜 = 2030-01-06）が完成
+      expect(result.current.data.completedWeeks).toContain("2030-01-06");
+      // justCompletedSunday は移動元 A=2030-01-12 の週（=2030-01-06）
+      expect(result.current.justCompletedSunday).toBe("2030-01-06");
+    });
+
+    it("F009 セマンティクス：未達成化する週があっても completedWeeks から削除しない", () => {
+      const { result } = renderHook(() => useAppData());
+      const week = [
+        "2030-01-06",
+        "2030-01-07",
+        "2030-01-08",
+        "2030-01-09",
+        "2030-01-10",
+        "2030-01-11",
+        "2030-01-12",
+      ];
+      // 完成週を持つ AppData を restoreData で直接構築する
+      const meals: Record<string, { lines: { text: string; done: boolean }[] }> = {};
+      for (const d of week) meals[d] = { lines: [{ text: "ごはん", done: false }] };
+      act(() => {
+        result.current.restoreData({
+          version: 1,
+          meals,
+          stock: [],
+          favorites: [],
+          completedWeeks: ["2030-01-06"],
+        });
+      });
+      expect(result.current.data.completedWeeks).toContain("2030-01-06");
+      // 達成済みの月曜（2030-01-07）と、別週の空日（2030-01-13）をスワップ → 月曜が空になる
+      act(() => {
+        result.current.swapDays("2030-01-07", "2030-01-13");
+      });
+      // F009: 一度入ったキーは減らない
+      expect(result.current.data.completedWeeks).toContain("2030-01-06");
+    });
+
+    it("両方同じ週内のスワップ：week キーは 1 度しか評価しない（重複追加しない）", () => {
+      const { result } = renderHook(() => useAppData());
+      // 週 2030-01-06〜2030-01-12 を 6 日埋め、月曜は空
+      const fill = [
+        "2030-01-06",
+        "2030-01-08",
+        "2030-01-09",
+        "2030-01-10",
+        "2030-01-11",
+        "2030-01-12",
+      ];
+      act(() => {
+        for (const d of fill) result.current.setMealsText(d, "ごはん");
+        // 月曜（2030-01-07）は空のまま
+      });
+      // 同一週内：火曜（埋まり）と月曜（空）をスワップ → 月曜埋まり、火曜空 → 週は未完成のまま
+      act(() => {
+        result.current.swapDays("2030-01-07", "2030-01-08");
+      });
+      expect(result.current.data.completedWeeks).not.toContain("2030-01-06");
+    });
+
+    it("既達成週は再評価しても justCompletedSunday を再発火させない", () => {
+      const { result } = renderHook(() => useAppData());
+      const week = [
+        "2030-01-06",
+        "2030-01-07",
+        "2030-01-08",
+        "2030-01-09",
+        "2030-01-10",
+        "2030-01-11",
+        "2030-01-12",
+      ];
+      const meals: Record<string, { lines: { text: string; done: boolean }[] }> = {};
+      for (const d of week) meals[d] = { lines: [{ text: "ごはん", done: false }] };
+      act(() => {
+        result.current.restoreData({
+          version: 1,
+          meals,
+          stock: [],
+          favorites: [],
+          completedWeeks: ["2030-01-06"],
+        });
+      });
+      expect(result.current.justCompletedSunday).toBeNull();
+      // 既達成週内のスワップ → 何も変わらない
+      act(() => {
+        result.current.swapDays("2030-01-06", "2030-01-08");
+      });
+      expect(result.current.justCompletedSunday).toBeNull();
+    });
+  });
 });

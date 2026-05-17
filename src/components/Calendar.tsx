@@ -13,12 +13,24 @@ type Props = {
   scrollTarget?: DateKey;
   /** 現在フロート編集中の対象（DayRow のハイライト判定用） */
   editingTarget: EditingTarget | null;
+  /** F012: 現在「移動モード」の起点（青枠強調する日）。null なら非アクティブ */
+  swapSource: DateKey | null;
+  /** F012: スワップ実行直後の短時間フラッシュ対象日（両日）。null なら非表示 */
+  swapFlashDates: ReadonlySet<DateKey> | null;
   /** 行タップで FloatingEditor を起動する */
   onRequestEditLine: (dateKey: DateKey, lineIndex: number) => void;
   /** メモタップで FloatingEditor を起動する */
   onRequestEditMemo: (dateKey: DateKey) => void;
   /** ＋追加ボタン押下で新規空行追加 + その行を FloatingEditor で編集 */
   onRequestAddLine: (dateKey: DateKey) => void;
+  /** F013: 行間挿入。挿入後はフロート編集を起動する */
+  onRequestInsertLine: (dateKey: DateKey, lineIndex: number, where: "above" | "below") => void;
+  /** F012: 日付ラベル長押し → 移動モード開始（同日再長押しは解除） */
+  onLongPressDate: (dateKey: DateKey) => void;
+  /** F012: 移動モード中の日付ラベルタップ → スワップ実行（同日再タップは解除） */
+  onTapDate: (dateKey: DateKey) => void;
+  /** F012: 料理行 wobble 進入時の通知（移動モード解除に使う） */
+  onLineWobbleEnter: () => void;
 };
 
 /** 初期表示範囲：±60日 */
@@ -31,9 +43,15 @@ export function Calendar({
   api,
   scrollTarget,
   editingTarget,
+  swapSource,
+  swapFlashDates,
   onRequestEditLine,
   onRequestEditMemo,
   onRequestAddLine,
+  onRequestInsertLine,
+  onLongPressDate,
+  onTapDate,
+  onLineWobbleEnter,
 }: Props) {
   const today = todayKey();
   const [range, setRange] = useState(() => ({
@@ -216,13 +234,20 @@ export function Calendar({
                       : null
                   }
                   isMemoEditing={editingTarget?.kind === "memo" && editingTarget.dateKey === date}
+                  isSwapSource={swapSource === date}
+                  isSwapTarget={swapSource !== null && swapSource !== date}
+                  isSwapFlash={swapFlashDates?.has(date) ?? false}
                   onToggleLine={(i) => api.toggleLine(date, i)}
                   onToggleFavorite={(i) => api.toggleFavorite(date, i)}
                   onToggleCart={(i) => api.toggleCart(date, i)}
                   onDeleteLine={(i) => api.deleteLine(date, i)}
+                  onInsertLineAt={(i, where) => onRequestInsertLine(date, i, where)}
                   onAddLine={() => onRequestAddLine(date)}
                   onRequestEditLine={(i) => onRequestEditLine(date, i)}
                   onRequestEditMemo={() => onRequestEditMemo(date)}
+                  onLineWobbleEnter={onLineWobbleEnter}
+                  onLongPressDate={() => onLongPressDate(date)}
+                  onTapDate={() => onTapDate(date)}
                 />
               </div>
             </div>

@@ -42,6 +42,19 @@ export type AppDataApi = {
   toggleLine: (date: DateKey, lineIndex: number) => void;
   /** 指定行だけを削除（他の行の完了・お気に入りは保持） */
   deleteLine: (date: DateKey, lineIndex: number) => void;
+  /**
+   * 指定日の lineIndex の「上」または「下」に空行を 1 つ挿入する（F013 行間挿入）。
+   * 挿入された空行の index を返す（呼び出し側が即フロート編集に渡す用）。
+   * 範囲外 index は no-op で -1 を返す。
+   */
+  insertLineAt: (date: DateKey, lineIndex: number, where: "above" | "below") => number;
+  /**
+   * 2 日の lines + memo を入れ替える（F012 日付ごとスワップ）。
+   * 双方向入れ替えのためデータ消失リスクなし。同日 / 両方空 / 範囲外は no-op。
+   * スワップ後、両週を再評価し、新規達成週があれば completedWeeks に union し、
+   * 移動元 dateA の週を優先して justCompletedSunday にセットする（F009「減らない」を維持）。
+   */
+  swapDays: (dateA: DateKey, dateB: DateKey) => void;
   /** お気に入りトグル。同じ料理（正規化テキスト一致）が別日にあれば共通でマーキングされる */
   toggleFavorite: (date: DateKey, lineIndex: number) => void;
   /** 買い物マーカーのトグル。行ごと（その日のその行のみ）に閉じる手動マーキング */
@@ -91,6 +104,18 @@ function linesAreEmpty(lines: DayMeals["lines"]): boolean {
   if (lines.length === 0) return true;
   if (lines.length === 1 && lines[0]?.text === "") return true;
   return false;
+}
+
+/**
+ * その日が「丸ごと空」か（lines も memo も実質的に未入力）。
+ * F012 スワップの「両方空ならノーオペ」判定に使う。
+ * auto-generated 4 空行（全 text === ""）も memo なしなら空扱いとする。
+ */
+function isCompletelyEmptyDay(day: DayMeals | undefined): boolean {
+  if (!day) return true;
+  if (day.memo && day.memo !== "") return false;
+  if (day.lines.length === 0) return true;
+  return day.lines.every((l) => l.text === "");
 }
 
 /**
@@ -348,6 +373,100 @@ export function useAppData(): AppDataApi {
     });
   }, []);
 
+  // F013 行間挿入：指定行の「上」または「下」に空行を 1 つ挿入する。
+  // 挿入された空行の最終 index を返す（呼び出し側が即フロート編集に渡す）。
+  // `useState` の更新は非同期で setState 内のクロージャから直接 index を返せないため、
+  // 計算は updater 外で先に行ってから setState を発火する（外側で参照保持）。
+  const insertLineAt = useCallback(
+    (date: DateKey, lineIndex: number, where: "above" | "below"): number => {
+      let insertedIndex = -1;
+      setState((prev) => {
+        const day = prev.data.meals[date];
+        const before = day?.lines ?? [];
+        // 範囲：above は 0..length（length は末尾の手前に挿入）、below は -1..length-1
+        // 仕様上は対象行（既存行）に対して呼ぶため通常範囲内だが、念のためクランプする
+        let insertIdx: number;
+        if (where === "above") {
+          insertIdx = Math.max(0, Math.min(lineIndex, before.length));
+        } else {
+          insertIdx = Math.max(0, Math.min(lineIndex + 1, before.length));
+        }
+        const nextLines: MealLine[] = [
+          ...before.slice(0, insertIdx),
+          { text: "", done: false },
+          ...before.slice(insertIdx),
+        ];
+        insertedIndex = insertIdx;
+        const nextDay: DayMeals = { lines: nextLines };
+        if (day?.memo) nextDay.memo = day.memo;
+        return {
+          ...prev,
+          data: { ...prev.data, meals: { ...prev.data.meals, [date]: nextDay } },
+        };
+      });
+      return insertedIndex;
+    },
+    [],
+  );
+
+  // F012 日付ごとスワップ：dateA と dateB の lines + memo を入れ替える。
+  // スワップ後、両週を再評価し、新規達成週があれば completedWeeks に union し
+  // 移動元 dateA の週を優先して justCompletedSunday を立てる。
+  // F009「献血カウントは減らない」を維持するため、未達成化する週があっても削除しない。
+  const swapDays = useCallback((dateA: DateKey, dateB: DateKey) => {
+    if (dateA === dateB) return;
+    setState((prev) => {
+      const dayA = prev.data.meals[dateA];
+      const dayB = prev.data.meals[dateB];
+      // 両方空ならノーオペ
+      if (isCompletelyEmptyDay(dayA) && isCompletelyEmptyDay(dayB)) return prev;
+
+      const nextMeals = { ...prev.data.meals };
+      // 入れ替え：A の元値を B に、B の元値を A に。空（undefined）の場合は delete する
+      // （linesAreEmpty かつ memo なしのケース。日付ごと除外で他の経路と一貫）
+      const writeAt = (target: DateKey, sourceDay: DayMeals | undefined) => {
+        if (sourceDay === undefined) {
+          delete nextMeals[target];
+          return;
+        }
+        // 受け取り側に DayMeals を複製して書き込む（memo の有無を保ち、参照共有を避ける）
+        const next: DayMeals = { lines: sourceDay.lines };
+        if (sourceDay.memo !== undefined) next.memo = sourceDay.memo;
+        nextMeals[target] = next;
+      };
+      writeAt(dateA, dayB);
+      writeAt(dateB, dayA);
+
+      // 週達成の再評価（union のみ、減らさない）
+      const sundayA = startOfWeekKey(dateA);
+      const sundayB = startOfWeekKey(dateB);
+      const completedSet = new Set(prev.data.completedWeeks);
+      const newlyCompleted: DateKey[] = [];
+      const evaluate = (sunday: DateKey) => {
+        if (completedSet.has(sunday)) return;
+        if (!isWeekComplete(nextMeals, sunday)) return;
+        completedSet.add(sunday);
+        newlyCompleted.push(sunday);
+      };
+      // 移動元 A の週を先に評価して splash の優先度を担保
+      evaluate(sundayA);
+      if (sundayB !== sundayA) evaluate(sundayB);
+
+      const completedWeeks =
+        newlyCompleted.length === 0
+          ? prev.data.completedWeeks
+          : [...prev.data.completedWeeks, ...newlyCompleted];
+      const justCompletedSunday =
+        newlyCompleted.length === 0 ? prev.justCompletedSunday : (newlyCompleted[0] ?? null);
+
+      return {
+        ...prev,
+        data: { ...prev.data, meals: nextMeals, completedWeeks },
+        justCompletedSunday,
+      };
+    });
+  }, []);
+
   const toggleCart = useCallback((date: DateKey, lineIndex: number) => {
     setState((prev) => {
       const day = prev.data.meals[date];
@@ -462,6 +581,8 @@ export function useAppData(): AppDataApi {
     setMemo,
     toggleLine,
     deleteLine,
+    insertLineAt,
+    swapDays,
     toggleFavorite,
     toggleCart,
     addStock,
