@@ -257,3 +257,179 @@ L0 サイクル（PR #20、SPEC.md「バックアップ（二層構成）」）�
 - 妥当。SPEC.md「バックアップ（二層構成）」が機能×条件粒度で完全に確定しており、迷う場面はなかった
 - 独立検証 agent の不在による品質劣化はなし（自己検証＋計算センサーで十分捕捉）
 - L2 発動閾値には遠い（変更ファイル数 9、新規行 +750 程度）。次回サイクルも M1 で問題ない見込み
+
+---
+
+### 2026-05-17: F007 バックアップ機構クリップボード化 L1 実装（PR #35 INSTRUCTIONS.md → L1）
+
+L0 改修サイクル（PR #34、SPEC.md「バックアップ（クリップボード方式）」）と
+L1 申し送り（PR #35、INSTRUCTIONS.md）に従い、9 タスクを実装。
+
+#### 変更点
+
+**Task 1: `src/lib/backup.ts` 縮約**
+- 削除：`BACKUP_INTERVAL_DAYS` / `formatISOWeek` / `getBackupFilename` / `triggerDownload` / `shouldShowExportBanner`
+- 維持：`serializeBackup` / `parseBackup`（クリップボード書き込みとテキスト復元の両経路で再利用）
+- `date-fns` の `differenceInCalendarDays` / `getISOWeek` / `getISOWeekYear` import を撤去
+
+**Task 2: `src/lib/storage.ts` 縮約 + 旧キー即時削除**
+- 削除：`LAST_EXPORT_KEY` 定数 / `loadLastExport` / `saveLastExport`
+- 追加：`loadData()` 初回呼び出し時に `localStorage.removeItem('cookpato:lastExport:v1')` を idempotent 実行
+- SPEC §「データモデル進化」expand-contract プロトコル例外条項に従い、AppData プライマリキーには触らない
+
+**Task 3: `src/hooks/useBackup.ts` 刷新**
+- 削除 API：`showBanner` / `lastExport` / `exportFile` / `markExported`
+- 新 API：`copyToClipboard(): Promise<"ok" | "fail">` — `navigator.clipboard.writeText(serializeBackup(api.data))` を try/catch
+- 維持 API：`importFromText(text): ImportResult`
+- 戻り値は `useMemo` で安定化
+
+**Task 4: `src/components/BackupBadge.tsx` 削除**
+- ファイルごと削除（`src/components/BackupBadge.tsx`）
+- `src/assets/shimaenaga-backup.png` も削除（他参照なし）
+- `src/index.css` の `@keyframes shimaenaga-float` / `.animate-shimaenaga-float` / `.animate-shimaenaga-float-paused` / `prefers-reduced-motion` 配下定義を削除
+- `shimaenaga-cart.png` は DayRow（買い物マーカー）で使用継続のため維持
+
+**Task 5: `src/components/StockList.tsx` に `copySlot` プロップ追加**
+- `restoreSlot` と並列に `copySlot?: React.ReactNode` を追加し、折りたたみ展開時の末尾に描画
+- 既存 UI には変更なし
+
+**Task 6: `src/components/Toast.tsx` 新規追加**
+- 画面下部に 3 秒滞在 → 自動消去
+- `pointer-events: none` で操作阻害なし
+- `motion-safe:animate-toast-fade`（150ms フェードイン）+ `prefers-reduced-motion` 配慮
+- `kind: "info" | "error"` で色分け（info=neutral-800、error=red-600）
+- 新規 CSS keyframe `toast-fade` を `src/index.css` に追加
+
+**Task 7: `src/components/BackupRestore.tsx` 拡張**
+- 経路 1（ファイル復元）：既存ロジックを温存、ボタン文言を「バックアップから復元」→ **「ファイルから復元」** に改名（SPEC §「経路 1」定義に合わせる）
+- 経路 2（クリップボード貼り付け復元）新規追加：「クリップボードから復元」ボタン → 折りたたみ内 textarea + 「復元」/「キャンセル」ボタン
+- 両経路とも：内容を `pendingText` に保持 → `ConfirmRestoreDialog`「現在のデータを上書きします。続行しますか？」→ 確定タップで初めて `importFromText` を呼ぶ（確認前にデータ上書きが起きない順序を明示実装）
+- 検証失敗時は現データを変更せずインラインエラー（`role="alert"`）、成功時は `<output>` で 3 秒成功メッセージ
+
+**Task 8: `src/components/BackupCopyButton.tsx` 新規追加 + `src/App.tsx` 配線整理**
+- `BackupCopyButton`：折りたたみ内に表示する「バックアップをコピー」ボタン。`onCopy` 結果に応じて `onToast` を呼ぶ
+- `App.tsx`：`BackupBadge` import と `showBanner` 分岐を削除、`toast` state + `showToast` / `dismissToast` を追加、`StockList.copySlot` に `BackupCopyButton` を注入、画面下部に `Toast` を配置
+
+**Task 9: テスト更新**
+- `tests/backup.test.ts`：旧 API 系（`formatISOWeek` / `getBackupFilename` / `shouldShowExportBanner`）テストを削除、`serializeBackup` / `parseBackup` テストは維持
+- `tests/storage.test.ts`：`loadLastExport` / `saveLastExport` テストを削除、新規 3 ケース追加（旧キー削除 / 旧キー不在時の冪等 / AppData プライマリキーへの非影響）
+- `tests/useBackup.test.tsx` 新規追加：`copyToClipboard` の成功・失敗 2 ケース（必須、`navigator.clipboard.writeText` を `Object.defineProperty` で差し替え）+ `importFromText` の 3 ケース（成功 / 不正 JSON / 実質空）
+
+#### センサー結果（全 5 項目 pass）
+| コマンド | 結果 |
+|---|---|
+| `npm run typecheck` | ✅ |
+| `npm run lint` | ✅ |
+| `npm run format:check` | ✅ |
+| `npm test` | ✅ 228/228（前回 229 → backup 旧テスト 5 件削除、storage 旧テスト 2 件削除、storage 新 3 件 + useBackup 新 5 件 = -7 +8 - 1 旧 serializeBackup 統合差分）|
+| `npm run build` | ✅（dist 375.18 kB JS / gzip 88.49 kB、BackupBadge 削除分のバンドル減と Toast/BackupCopyButton 追加分のバンドル増で実質中立、`differenceInCalendarDays` 等の date-fns サブモジュールが落ちた）|
+
+#### 既知未検証事項
+- **実機 iPhone 11 Safari スタンドアロン PWA モードでの `navigator.clipboard.writeText` 挙動**：user gesture 起源（ボタンタップ）で permission prompt なしで動作するはずだが、iOS 版数による差異あり。失敗時のトースト分岐発火を実機確認推奨
+- **textarea への iOS 標準「貼り付け」ジェスチャ**：長押し → 貼り付けメニューが普通に出ることを実機確認推奨
+- **トーストの 3 秒滞在 + `pointer-events: none`**：スクロール / タップを阻害しないことを実機確認推奨
+- jsdom テストでは `navigator.clipboard` を `Object.defineProperty` で差し替えてシミュレートしているため、ブラウザ実機の Permissions API 経路は別途確認が必要
+
+#### 哲学整合（INDEX.md / CLAUDE.md「早い・簡単・便利」）
+- **早い** ✓ — タップ 1 回でコピー完了、OS ダイアログを挟まない
+- **簡単** ✓ — シマエナガバッジ催促が消滅、妻に何も求めない設計
+- **便利** ✓ — JSON 形式での外部保管経路を維持、ファイル復元との対称運用も成立
+
+#### 体制事後評価（M1 単体モード）
+- 妥当。INSTRUCTIONS.md（PR #35）が機能×タスク粒度で完全に確定しており、迷う場面はなかった
+- 独立検証 agent の不在による品質劣化はなし（自己検証＋計算センサーで十分捕捉、Copilot レビューも L0 段階で 5 件取り込み済）
+- L2 発動閾値には遠い（変更ファイル数 9、新規行 +400 程度、削除 +200 程度）。次回サイクルも M1 で問題ない見込み
+
+---
+
+### 2026-05-17: F007 改訂2 — 動作確認フィードバック対応 popup 化（L0+L1 1 サイクル）
+
+PR #36 で実装した F007 を妻が動作確認したところ、「ストック内でのストック以外のスクロール
+は嫌」「ボタンを置いてポップアップ表示でバックアップ操作するように」とのフィードバック。
+SPEC 改訂 + L1 実装を 1 サイクルで実施。
+
+#### 変更点
+
+**SPEC.md §「バックアップ」全面改訂（改訂2）**
+- 見出し「バックアップ（クリップボード方式 + modal 集約、2026-05-17 改訂2）」
+- 新サブセクション「エントリ UI」追加：ストック折りたたみ内に「バックアップ」ボタン 1 個 → 中央 modal（既存 ConfirmRestoreDialog 同パターン）
+- §「エクスポート UI」更新：modal 内に「バックアップをコピー」ボタン、成功時 modal 自動クローズ + トースト 3 秒、失敗時 modal 開いたままリトライ
+- §「復元 UI」更新：modal 内に 2 経路（ファイル + 貼り付け）を縦並び、textarea 展開も modal 内
+- §「復元時の共通挙動」更新：modal 内インライン `<output>` 3 秒（modal 開いたまま、× で閉じる）、確認ダイアログは modal の上層に z-index 60 で重ねる
+- トースト a11y / `prefers-reduced-motion` の CSS 直接処理（Tailwind `motion-safe:` 非適用問題）を SPEC に反映
+
+**コード変更**
+- `src/components/BackupSheet.tsx` 新規（エントリボタン + modal + ConfirmRestoreDialog を統合した単一ファイル）
+- `src/components/BackupCopyButton.tsx` 削除（BackupSheet にロジック吸収）
+- `src/components/BackupRestore.tsx` 削除（BackupSheet にロジック吸収）
+- `src/components/StockList.tsx`：`copySlot` + `restoreSlot` → 単一 `backupSlot` プロップに統合
+- `src/App.tsx`：`<BackupSheet>` を `backupSlot` に注入
+- `INDEX.md` / `history/SUMMARY.md` の F007 説明文を改訂2 反映
+
+#### センサー結果（全 5 項目 pass）
+| コマンド | 結果 |
+|---|---|
+| `npm run typecheck` | ✅ |
+| `npm run lint` | ✅ |
+| `npm run format:check` | ✅ |
+| `npm test` | ✅ 228/228（テスト件数変化なし。useBackup API 不変のため既存テストすべて pass）|
+| `npm run build` | ✅（バンドル中立。BackupSheet 単一ファイル化で実装量はやや増えたが BackupCopyButton + BackupRestore 削除で相殺）|
+
+#### 哲学整合（INDEX.md / CLAUDE.md「早い・簡単・便利」）
+- **早い** ✓ — ボタン 1 タップで modal、コピー成功で自動クローズして元に戻る
+- **簡単** ✓ — ストック領域が「バックアップ」ボタン 1 つだけのシンプル状態に。妻の「ストック以外のスクロール嫌」フィードバックを構造的に解消（操作群が modal に閉じる）
+- **便利** ✓ — 3 操作（コピー / ファイル復元 / 貼り付け復元）が同じ modal 内に並ぶ。バックアップ系の動線が一貫
+
+#### 体制事後評価（M1 単体モード、L0+L1 1 サイクル運用）
+- 妥当。動作確認フィードバックという小規模なスコープに対し、SPEC 改訂 + 実装 + テスト + ドキュメント更新を 1 サイクルで完遂
+- ユーザー（妻の代理として夫）が L0 ロールを担い、modal 設計の選択肢（popup style / 内容 / entry button / SPEC 更新方針）を AskUserQuestion 経由で確定 → そのまま L1 実装に流れた
+
+---
+
+### 2026-05-17: F007 改訂3 — swipe-reveal 化（L0+L1 1 サイクル）
+
+改訂2 で動作確認後、妻側フィードバック「バックアップはスライドしたら出るけど自然に隠れる
+動作にして。引っ張って 3 秒後には隠れる感じ」を受け、常時表示の「バックアップ」ボタンを
+ストックヘッダー swipe で 3 秒だけ slide-in する形にさらに変更。
+
+#### 変更点
+
+**SPEC.md §「バックアップ」改訂3**
+- 見出し「クリップボード方式 + modal 集約 + swipe-reveal、2026-05-17 改訂3」
+- §「エントリ UI」を全面書き換え：vertical swipe (≥30px) で slide-in、出現から 3 秒で自動 slide-out、tap 干渉防止（200ms 以内の onClick 無視）、ヘッダー tap は既存挙動（折りたたみ開閉）維持
+
+**コード変更**
+- `src/components/StockList.tsx`：
+  - 新 state `backupRevealed` + refs (`swipeStartYRef` / `swipeMaxDyRef` / `revealTimerRef` / `lastSwipeRevealAtRef`)
+  - 新ハンドラ `handleHeaderPointerDown` / `handleHeaderPointerMove` / `handleHeaderPointerUp` / `handleHeaderPointerCancel` / `handleHeaderClick` / `revealBackup`
+  - `BACKUP_REVEAL_THRESHOLD_PX = 30` / `BACKUP_REVEAL_DURATION_MS = 3000` 定数
+  - Props 名変更 `backupSlot` → `backupTrigger`
+  - 最外 wrapper に `relative` 追加、最下層に `backupTrigger` を `absolute top-0 right-0` で配置、`translate-x` + `opacity` の 200ms ease-out トランジション
+  - 折りたたみ body 末尾の旧 `backupSlot` 描画箇所を削除
+- `src/App.tsx`：prop 名追従（`backupSlot` → `backupTrigger`）
+
+**INDEX.md / history/SUMMARY.md / history/CHANGELOG.md**
+- F007 説明文を改訂3 反映に更新（swipe-reveal 動線、3 秒自動 hide、画面占有ゼロ）
+
+#### センサー結果（全 5 項目 pass）
+| コマンド | 結果 |
+|---|---|
+| `npm run typecheck` | ✅ |
+| `npm run lint` | ✅ |
+| `npm run format:check` | ✅ |
+| `npm test` | ✅ 228/228（変化なし、`StockList` の DOM 構造を保ち既存 test と互換維持）|
+| `npm run build` | ✅ |
+
+#### 既知未検証事項
+- 実機 iPhone 11 Safari での vertical swipe 検出（pointer events の挙動と touch-action 干渉）。30px しきい値で誤検知 / 取りこぼしが少ないかを実機確認推奨
+- swipe 中に指がヘッダー領域を外れた場合の挙動（`pointercancel` で正しく state がリセットされるか）
+- スクロール容器との干渉（ストック折りたたみ body 内の `overflow-y-auto` への影響なし、ヘッダーは独立要素なので問題ない見込み）
+
+#### 哲学整合（INDEX.md / CLAUDE.md「早い・簡単・便利」）
+- **早い** ✓ — swipe 1 回でボタン出現、tap 1 回で modal
+- **簡単** ✓ — 普段は完全に隠れる。妻のメンタル負荷ゼロ（緊急時の保険感を視覚的に強化）
+- **便利** ✓ — バックアップ機能の発見性は若干下がるが、ユーザーが望んで作ったジェスチャなので学習コストは低い。隠れていることで「あること自体は知っている」という安心感だけ残る
+
+#### 体制事後評価（M1 単体モード、L0+L1 1 サイクル）
+- 妥当。SPEC 改訂 + 実装 + テスト維持を 1 サイクルで完遂
+- swipe gesture / tap 干渉の判定など実装上の細部判断（200ms 閾値、30px しきい値）も SPEC に記録してドリフト防止

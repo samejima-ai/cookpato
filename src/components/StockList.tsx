@@ -10,13 +10,23 @@ import type { StockItem } from "../types";
 
 type Props = {
   api: AppDataApi;
-  /** 折りたたみ展開時に末尾へ描画する任意スロット（バックアップ復元ボタン等） */
-  restoreSlot?: React.ReactNode;
+  /**
+   * 折りたたみヘッダーの右側に「swipe して 3 秒だけ出る」スロット。
+   * バックアップ操作 modal 起動ボタン等を入れる。F007 改訂3（2026-05-17）。
+   * 入れた要素はヘッダー上で vertical swipe（>30px）すると 3 秒間 slide-in 表示され、
+   * 3 秒経つと slide-out で自動的に隠れる（妻が頻繁に目にしない設計）。
+   */
+  backupTrigger?: React.ReactNode;
 };
 
 const LONG_PRESS_MS = 500;
 
-export function StockList({ api, restoreSlot }: Props) {
+/** ヘッダー swipe で `backupTrigger` を出現させる検出しきい値（vertical px） */
+const BACKUP_REVEAL_THRESHOLD_PX = 30;
+/** 出現後の自動 hide までの時間（ms）。SPEC「3 秒」 */
+const BACKUP_REVEAL_DURATION_MS = 3000;
+
+export function StockList({ api, backupTrigger }: Props) {
   // 起動時は「閉」状態。妻が献立メモ操作中はストックリストが画面を占有しないよう、
   // 必要な時だけタップで展開する（SPEC「ストックリスト」改訂）。
   const [expanded, setExpanded] = useState(false);
@@ -26,6 +36,14 @@ export function StockList({ api, restoreSlot }: Props) {
   const [draftNameValid, setDraftNameValid] = useState(false);
   // 追加成功時に input を空に戻すための再マウント用キー
   const [draftResetKey, setDraftResetKey] = useState(0);
+  /** ヘッダー swipe で出現したバックアップトリガが見えているか（true: slide-in 中） */
+  const [backupRevealed, setBackupRevealed] = useState(false);
+  /** swipe 検出用：pointerdown 時の Y 座標（最大移動量を測るための起点） */
+  const swipeStartYRef = useRef<number | null>(null);
+  /** swipe 中の最大 |dy|（pointerup 時の判定に使う） */
+  const swipeMaxDyRef = useRef(0);
+  /** 自動 hide タイマー */
+  const revealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [draftQty, setDraftQty] = useState("");
   const draftNameRef = useRef<HTMLInputElement | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -73,6 +91,64 @@ export function StockList({ api, restoreSlot }: Props) {
       }
       return nextExpanded;
     });
+  }, []);
+
+  /**
+   * ヘッダー swipe で backupTrigger を 3 秒間 reveal。
+   * vertical 移動量が BACKUP_REVEAL_THRESHOLD_PX 以上で swipe 確定。
+   * BACKUP_SWIPE_MIN_PX 未満は tap 扱いで展開トグルに通す。
+   * 中間域（10〜30px）は swipe にも tap にもならず無視する（誤検知防止）。
+   * 直近 swipe で reveal した場合の click は toggle をスキップする
+   * （pointerup の直後に onClick が発火するため）。
+   */
+  const lastSwipeRevealAtRef = useRef(0);
+
+  const revealBackup = useCallback(() => {
+    lastSwipeRevealAtRef.current = Date.now();
+    setBackupRevealed(true);
+    if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
+    revealTimerRef.current = window.setTimeout(() => {
+      setBackupRevealed(false);
+      revealTimerRef.current = null;
+    }, BACKUP_REVEAL_DURATION_MS);
+  }, []);
+
+  const handleHeaderPointerDown = useCallback((e: React.PointerEvent<HTMLButtonElement>) => {
+    swipeStartYRef.current = e.clientY;
+    swipeMaxDyRef.current = 0;
+  }, []);
+
+  const handleHeaderPointerMove = useCallback((e: React.PointerEvent<HTMLButtonElement>) => {
+    if (swipeStartYRef.current === null) return;
+    const dy = Math.abs(e.clientY - swipeStartYRef.current);
+    if (dy > swipeMaxDyRef.current) swipeMaxDyRef.current = dy;
+  }, []);
+
+  const handleHeaderPointerUp = useCallback(() => {
+    const maxDy = swipeMaxDyRef.current;
+    swipeStartYRef.current = null;
+    swipeMaxDyRef.current = 0;
+    if (maxDy >= BACKUP_REVEAL_THRESHOLD_PX) {
+      revealBackup();
+    }
+  }, [revealBackup]);
+
+  const handleHeaderPointerCancel = useCallback(() => {
+    swipeStartYRef.current = null;
+    swipeMaxDyRef.current = 0;
+  }, []);
+
+  /** tap 由来の展開トグル。直近 swipe reveal 後 200ms 以内の click は無視 */
+  const handleHeaderClick = useCallback(() => {
+    if (Date.now() - lastSwipeRevealAtRef.current < 200) return;
+    handleToggleExpand();
+  }, [handleToggleExpand]);
+
+  // アンマウント時のタイマー掃除
+  useEffect(() => {
+    return () => {
+      if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
+    };
   }, []);
 
   function handleAdd() {
@@ -389,11 +465,15 @@ export function StockList({ api, restoreSlot }: Props) {
   );
 
   return (
-    <div className="bg-neutral-50 border-t border-neutral-200 safe-bottom">
+    <div className="relative bg-neutral-50 border-t border-neutral-200 safe-bottom">
       <button
         ref={headerRef}
         type="button"
-        onClick={handleToggleExpand}
+        onClick={handleHeaderClick}
+        onPointerDown={handleHeaderPointerDown}
+        onPointerMove={handleHeaderPointerMove}
+        onPointerUp={handleHeaderPointerUp}
+        onPointerCancel={handleHeaderPointerCancel}
         className="w-full flex items-center justify-between px-4 py-2 text-left text-sm text-neutral-600 min-h-11"
         aria-expanded={expanded}
       >
@@ -503,9 +583,24 @@ export function StockList({ api, restoreSlot }: Props) {
               追加
             </button>
           </div>
-          {restoreSlot}
         </div>
       </div>
+      {/*
+        F007 改訂3: ヘッダー vertical swipe (>30px) で出現するバックアップトリガ。
+        3 秒後に自動 slide-out。tap は反応せず、swipe のみで現れる。
+        ヘッダー右端の矢印（▾▸）に被せる位置で slide-in する。普段は完全に
+        隠れて見通しが落ちない。`absolute` で位置を取るが、DOM 上はアコーディオン
+        本体より後ろに配置することで `header.nextElementSibling = アコーディオン`
+        の関係を保つ（テスト互換性のため）。
+      */}
+      {backupTrigger && (
+        <div
+          aria-hidden={!backupRevealed}
+          className={`pointer-events-none absolute top-0 right-0 min-h-11 flex items-center pr-2 transition-all duration-200 ease-out ${backupRevealed ? "translate-x-0 opacity-100" : "translate-x-full opacity-0"}`}
+        >
+          <div className="pointer-events-auto bg-neutral-50">{backupTrigger}</div>
+        </div>
+      )}
     </div>
   );
 }

@@ -2,15 +2,15 @@
  * localStorage ラッパー。単一キー "cookpato:data:v1" に AppData を JSON で保存。
  * 読み書きエラーは黙って初期値を返す（単一ユーザー・シンプル運用のため）。
  *
- * バックアップ：
- * - "cookpato:lastExport:v1": 最終ファイル書き出し日（DateKey 文字列）
- *   実体のバックアップは端末内 Files に蓄積される JSON ファイル（媒体外バックアップ）。
+ * 2026-05-17 F007 改訂: バックアップはクリップボード方式へ移行（SPEC §「バックアップ」）。
+ * 旧 "cookpato:lastExport:v1" キーは廃止、`loadData()` 初回呼び出し時に即時削除する
+ * （expand-contract プロトコル例外条項：機能廃止と運命を共にするメタ情報キー）。
  */
 import type { AppData, DateKey, DayMeals, StockItem } from "../types";
 import { computeAllCompleteWeekSundays } from "./week";
 
 const STORAGE_KEY = "cookpato:data:v1";
-const LAST_EXPORT_KEY = "cookpato:lastExport:v1";
+const LEGACY_LAST_EXPORT_KEY = "cookpato:lastExport:v1";
 
 function initialData(): AppData {
   return {
@@ -49,6 +49,13 @@ export function coerceAppData(parsed: unknown): AppData {
 
 /** 安全に読み込む。必須フィールド欠落や型不整合は初期値に寄せる */
 export function loadData(): AppData {
+  // 旧 F007（バックアップ二層構成）の lastExport キーを即時削除（idempotent）。
+  // SPEC §「データモデル進化（旧キーの即時削除）」expand-contract プロトコル例外条項。
+  try {
+    localStorage.removeItem(LEGACY_LAST_EXPORT_KEY);
+  } catch {
+    // removeItem の失敗は致命的でないため握りつぶす
+  }
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return initialData();
@@ -72,25 +79,6 @@ export function saveData(data: AppData): void {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
   } catch {
     // 書き込み失敗は許容（容量不足等）。次回入力で再試行される
-  }
-}
-
-/** 最終ファイル書き出し日（DateKey）を読む */
-export function loadLastExport(): DateKey | null {
-  try {
-    const raw = localStorage.getItem(LAST_EXPORT_KEY);
-    return typeof raw === "string" && raw !== "" ? raw : null;
-  } catch {
-    return null;
-  }
-}
-
-/** 最終ファイル書き出し日を書く */
-export function saveLastExport(date: DateKey): void {
-  try {
-    localStorage.setItem(LAST_EXPORT_KEY, date);
-  } catch {
-    // 失敗時もユーザー体験は止めない
   }
 }
 

@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { BackupBadge } from "./components/BackupBadge";
-import { BackupRestore } from "./components/BackupRestore";
+import { BackupSheet } from "./components/BackupSheet";
 import { Calendar } from "./components/Calendar";
 import { FloatingEditor } from "./components/FloatingEditor";
 import { SearchBar } from "./components/SearchBar";
 import { SearchResults } from "./components/SearchResults";
 import { StockList } from "./components/StockList";
+import { Toast, type ToastKind } from "./components/Toast";
 import { useAppData } from "./hooks/useAppData";
 import { useBackup } from "./hooks/useBackup";
 import { useSearch } from "./hooks/useSearch";
@@ -24,6 +24,13 @@ const SWAP_FLASH_MS = 150;
 export default function App() {
   const api = useAppData();
   const backup = useBackup(api);
+  // `id` を毎回インクリメントして Toast に `key` として渡す。連続コピー時に
+  // 既存トーストの 3 秒タイマーが新メッセージで上書きされず、確実にリセットされる。
+  const [toast, setToast] = useState<{ id: number; message: string; kind: ToastKind } | null>(null);
+  const showToast = useCallback((message: string, kind: ToastKind) => {
+    setToast((prev) => ({ id: (prev?.id ?? 0) + 1, message, kind }));
+  }, []);
+  const dismissToast = useCallback(() => setToast(null), []);
   const [query, setQuery] = useState("");
   const [scrollTarget, setScrollTarget] = useState<DateKey | undefined>(undefined);
   const [editingTarget, setEditingTarget] = useState<EditingTarget | null>(null);
@@ -213,9 +220,6 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-full max-w-xl mx-auto">
-      {backup.showBanner && (
-        <BackupBadge onSave={backup.exportFile} onComplete={backup.markExported} />
-      )}
       <header className="relative shrink-0 safe-top">
         <SearchBar
           value={query}
@@ -250,9 +254,18 @@ export default function App() {
         />
         <StockList
           api={api}
-          restoreSlot={<BackupRestore importFromText={backup.importFromText} />}
+          backupTrigger={
+            <BackupSheet
+              onCopy={backup.copyToClipboard}
+              importFromText={backup.importFromText}
+              onToast={showToast}
+            />
+          }
         />
       </main>
+      {toast && (
+        <Toast key={toast.id} message={toast.message} kind={toast.kind} onDismiss={dismissToast} />
+      )}
     </div>
   );
 }

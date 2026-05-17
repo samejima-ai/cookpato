@@ -1,12 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import {
-  coerceAppData,
-  isAppDataEffectivelyEmpty,
-  loadData,
-  loadLastExport,
-  saveData,
-  saveLastExport,
-} from "../src/lib/storage";
+import { coerceAppData, isAppDataEffectivelyEmpty, loadData, saveData } from "../src/lib/storage";
 import type { AppData } from "../src/types";
 
 beforeEach(() => {
@@ -107,13 +100,26 @@ describe("loadData", () => {
   });
 });
 
-describe("loadLastExport / saveLastExport", () => {
-  it("初期は null", () => {
-    expect(loadLastExport()).toBeNull();
+describe("loadData: legacy lastExport key cleanup (F007 2026-05-17 改訂)", () => {
+  it("旧 cookpato:lastExport:v1 キーが存在しても loadData 呼び出しで削除される", () => {
+    localStorage.setItem("cookpato:lastExport:v1", "2026-04-01");
+    loadData();
+    expect(localStorage.getItem("cookpato:lastExport:v1")).toBeNull();
   });
 
-  it("save → load で同値が取れる", () => {
-    saveLastExport("2026-05-05");
-    expect(loadLastExport()).toBe("2026-05-05");
+  it("旧キーが存在しなくても loadData は冪等に動作する", () => {
+    expect(localStorage.getItem("cookpato:lastExport:v1")).toBeNull();
+    expect(() => loadData()).not.toThrow();
+    expect(localStorage.getItem("cookpato:lastExport:v1")).toBeNull();
+  });
+
+  it("旧キー削除は AppData プライマリキーに影響しない", () => {
+    const data = makeData({ stock: [{ id: "a", text: "下味豚", qty: 2 }] });
+    saveData(data);
+    localStorage.setItem("cookpato:lastExport:v1", "2026-04-01");
+    const loaded = loadData();
+    expect(loaded.stock).toEqual(data.stock);
+    expect(localStorage.getItem("cookpato:lastExport:v1")).toBeNull();
+    expect(localStorage.getItem("cookpato:data:v1")).not.toBeNull();
   });
 });

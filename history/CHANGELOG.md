@@ -1,5 +1,154 @@
 # 変更履歴
 
+## 2026-05-17 (LC=1 F007 改訂3 — swipe-reveal 化サイクル)
+
+動作確認後の妻側フィードバック「バックアップはスライドしたら出るけど自然に隠れる動作にして。
+引っ張って 3 秒後には隠れる感じ」を受け、常時表示の「バックアップ」ボタンを
+ストックヘッダー swipe で 3 秒だけ slide-in する形に変更。
+
+### 追加
+- `src/components/StockList.tsx` にヘッダー vertical swipe 検出（>= 30px）+ reveal タイマー（3 秒）を追加
+  - `pointerdown` / `pointermove` / `pointerup` / `pointercancel` で `|dy|` の最大値を測り、`pointerup` 時点で 30px 以上なら `revealBackup()` 発火
+  - `lastSwipeRevealAtRef` で直近 reveal 時刻を覚え、200ms 以内の `onClick` は無視（swipe と tap の干渉防止）
+  - `revealTimerRef` で 3 秒タイマー、unmount 時に掃除
+  - `BACKUP_REVEAL_THRESHOLD_PX = 30` / `BACKUP_REVEAL_DURATION_MS = 3000` 定数
+- `StockList` JSX の最下層に `<div className="absolute top-0 right-0 ...">` で `backupTrigger` を配置。`translate-x` + `opacity` の 200ms ease-out trans で slide-in/out
+
+### 変更
+- `StockList` Props: `backupSlot?: ReactNode` → `backupTrigger?: ReactNode` に rename + 配置位置を「折りたたみ body 末尾」→「ヘッダー右端 absolute 重ね」に変更
+- `App.tsx` の prop 名を追従（`backupSlot` → `backupTrigger`）
+- `SPEC.md` §「バックアップ」を改訂3 へ：見出しに「+ swipe-reveal」追加、§「エントリ UI」サブセクションを全面書き換え（swipe 検出条件、200ms tap 干渉防止、3 秒タイマー起点、設計判断）
+- `INDEX.md` / `history/SUMMARY.md` の F007 説明文を改訂3 反映に更新
+- `StockList` の最外 wrapper に `relative` 追加（backup trigger の absolute 位置決め用）
+
+### 廃止
+- ストック折りたたみ body 末尾の `backupSlot` 描画箇所（不要、ヘッダー swipe-reveal に移動）
+
+### 体制
+- 判定: M1 維持 (S=2, U=0, R=1, N=1)
+- 事後評価: 妥当。妻の動作確認フィードバック → SPEC 改訂 + 実装まで 1 サイクルで完遂、テスト破損なし
+
+### 儀式記録
+- レベル: 1（LC=1、UX 微調整 + SPEC 改訂）
+- スキップ: なし
+- 検出件数: 矛盾 0 / 復活要求 0 / 再提案 0
+  - 注：`StockList` のヘッダー周りで「テスト破損リスク」を最初に発生させた（最外 wrapper に `<div className="relative">` を挟んだことで `header.nextElementSibling === accordion` が崩れた）が、`<div>` を outer の outer に統合する形で構造を保ち、テストすべて pass に戻した
+
+### 計算的センサー結果
+| 検査 | 結果 |
+|---|---|
+| 型チェック（`tsc --noEmit`） | PASS |
+| Lint（`biome check`） | PASS |
+| Format（`biome format`） | PASS |
+| テスト（`vitest run`） | PASS 228/228 |
+| ビルド（`tsc + vite build`） | PASS |
+
+### 哲学整合性チェック
+- F007 改訂3: 早い ✓（swipe 1 回で出る、tap 1 回で modal）/ 簡単 ✓（普段は完全に隠れる → メンタル負荷ゼロ、緊急時の保険感が伝わる）/ 便利 ✓（バックアップ機能の発見性は若干下がるが、ユーザーが望んで作ったジェスチャなので学習コストは低い）
+
+---
+
+## 2026-05-17 (LC=1 F007 改訂2 — 動作確認フィードバック対応・popup 化サイクル)
+
+動作確認後の妻側フィードバック「ストック内でのストック以外のスクロールは嫌」を受け、
+ストック折りたたみ内インライン配置 → 単一「バックアップ」ボタン + 中央 modal 集約に再設計。
+
+### 追加
+- `src/components/BackupSheet.tsx` 新規。ストック折りたたみ内の「バックアップ」エントリボタン + 中央 modal を統合。modal 内に「バックアップをコピー」「ファイルから復元」「クリップボードから復元」3 操作を集約。背景タップ / Escape / × で閉じる。コピー成功時 modal 自動クローズ + トースト、失敗時 modal 開いたまま + エラートースト。復元成功はインライン `<output>` 3 秒（modal 開いたまま）
+
+### 変更
+- `SPEC.md` §「バックアップ」を全面改訂：見出しを「クリップボード方式 + modal 集約、2026-05-17 改訂2」に変更、概要に「妻の動作確認フィードバック受領」を明記、「エントリ UI」サブセクション新設、復元 UI を「modal 内 2 経路」に書き換え、トースト a11y / `prefers-reduced-motion` の CSS 直接処理（Tailwind `motion-safe:` は不適）も SPEC に反映
+- `src/components/StockList.tsx`：`copySlot?: ReactNode` + `restoreSlot?: ReactNode` → 単一 `backupSlot?: ReactNode` に統合
+- `src/App.tsx`：`BackupCopyButton` + `BackupRestore` 注入を廃止し、単一 `<BackupSheet>` を `backupSlot` に注入
+- `INDEX.md` 機能一覧の F007 説明を「ボタン → modal」型に更新
+- `history/SUMMARY.md` の F007 説明を改訂2 反映に更新
+
+### 廃止（コード撤去完了）
+- `src/components/BackupCopyButton.tsx` をファイルごと削除（BackupSheet にロジック吸収）
+- `src/components/BackupRestore.tsx` をファイルごと削除（BackupSheet にロジック吸収）
+
+### 体制
+- 判定: M1 維持 (S=2, U=0, R=1, N=1)
+- 事後評価: 妥当。妻の動作確認フィードバック → 1 サイクルで SPEC 改訂 + 実装まで完遂
+
+### 儀式記録（本サイクルの振り返り儀式）
+- レベル: 1（LC=1、軽微な UX 改善 + SPEC 改訂を伴う）
+- スキップ: なし
+- 検出件数: 矛盾 0 / 復活要求 0 / 再提案 0
+
+### 計算的センサー結果
+| 検査 | 結果 |
+|---|---|
+| 型チェック（`tsc --noEmit`） | PASS |
+| Lint（`biome check`） | PASS |
+| Format（`biome format`） | PASS |
+| テスト（`vitest run`） | PASS 228/228 |
+| ビルド（`tsc + vite build`） | PASS |
+
+### 哲学整合性チェック
+- F007 改訂2: 早い ✓（ボタン 1 タップで modal、コピー成功で自動クローズ）/ 簡単 ✓（ストック領域がボタン 1 つだけのシンプル状態に戻る、迷わない）/ 便利 ✓（3 操作の集約で「バックアップ系」のメンタルモデルが 1 個所に）
+- 妻フィードバック「ストック以外のスクロール嫌」は「簡単」の損失 → 改訂2 で解消
+
+---
+
+## 2026-05-17 (LC=1 F007 クリップボードバックアップ L1 実装サイクル)
+
+### 追加
+- `src/hooks/useBackup.ts` を全面刷新。`copyToClipboard()` / `importFromText()` の 2 API に集約。`navigator.clipboard.writeText` で JSON を書き込み、失敗時は `"fail"` を返してフォールバックなし（妻に負担をかけない設計）
+- `src/components/Toast.tsx` を新規追加。画面下部 3 秒滞在、`pointer-events: none` で操作阻害なし、`motion-safe:animate-toast-fade` 150ms フェードイン、`prefers-reduced-motion` 配慮
+- `src/components/BackupCopyButton.tsx` を新規追加。`onCopy` 結果に応じて成功 / 失敗トーストを発火
+- `src/components/StockList.tsx` に `copySlot?: React.ReactNode` プロップを追加（折りたたみ展開時末尾、`restoreSlot` の隣に描画）
+- `src/components/BackupRestore.tsx` に経路 2「クリップボードから復元」を追加。textarea → 「復元」ボタン → 確認ダイアログ → 確定タップで初めて `importFromText` を呼ぶ順序
+- `src/index.css` に `@keyframes toast-fade` / `.animate-toast-fade` を追加
+- `tests/useBackup.test.tsx` を新規追加（`copyToClipboard` 成功 / 失敗の必須 2 ケース + `importFromText` 3 ケース）
+- `tests/storage.test.ts` に旧 `cookpato:lastExport:v1` キー削除の 3 ケースを追加
+
+### 変更
+- `src/lib/storage.ts` の `loadData()` 初回呼び出し時に `localStorage.removeItem('cookpato:lastExport:v1')` を idempotent 実行（expand-contract プロトコル例外条項）
+- `src/components/BackupRestore.tsx` のファイル復元ボタン文言を「バックアップから復元」→ **「ファイルから復元」** に改名（SPEC §「経路 1」定義 + 2 経路の文言区別）
+- `src/App.tsx`：`<BackupBadge>` 描画削除、`toast` state + `showToast` / `dismissToast` ハンドラ追加、`<Toast>` を画面下部に配置、`<StockList copySlot={<BackupCopyButton>}>` を注入
+
+### 廃止（コード撤去完了）
+- `src/components/BackupBadge.tsx` をファイルごと削除（旧 PR #29-#30 の歩行アニメ含む全機能）
+- `src/assets/shimaenaga-backup.png` を削除（他参照なし、`shimaenaga-cart.png` は買い物マーカーで使用継続のため維持）
+- `src/index.css` の `@keyframes shimaenaga-float` / `.animate-shimaenaga-float` / `.animate-shimaenaga-float-paused` 定義および `prefers-reduced-motion` 配下の関連定義を削除
+- `src/lib/backup.ts`：`BACKUP_INTERVAL_DAYS` / `formatISOWeek` / `getBackupFilename` / `triggerDownload` / `shouldShowExportBanner` を削除。`date-fns` の `differenceInCalendarDays` / `getISOWeek` / `getISOWeekYear` import も撤去
+- `src/lib/storage.ts`：`LAST_EXPORT_KEY` 定数 / `loadLastExport` / `saveLastExport` を削除
+- `src/hooks/useBackup.ts`：`showBanner` / `lastExport` / `exportFile` / `markExported` API を削除
+- `tests/backup.test.ts`：`formatISOWeek` / `getBackupFilename` / `shouldShowExportBanner` の describe を削除
+- `tests/storage.test.ts`：`loadLastExport / saveLastExport` の describe を削除
+- ルートの `INSTRUCTIONS.md` をクリーンアップ（PR #19 前例に従う、本サイクル完了の証跡）
+
+### 体制
+- 判定: M1 維持 (S=2, U=0, R=1, N=1)
+- 事後評価: 妥当。INSTRUCTIONS.md が機能×タスク粒度で完全に確定しており、迷う場面はなかった。M1 で 5 サイクル運用継続
+- REGIME-LOG.md 参照
+
+### 儀式記録（本サイクルの振り返り儀式）
+- レベル: 1（LC=1、L1 実装サイクル、SPEC 改変なし）
+- スキップ: なし
+- 検出件数: 矛盾 0 / 復活要求 0 / 再提案 0
+
+### 計算的センサー結果（5 層検出スタックの第 1 層）
+| 検査 | 結果 |
+|---|---|
+| 型チェック（`tsc --noEmit`） | PASS |
+| Lint（`biome check`） | PASS |
+| Format（`biome format`） | PASS |
+| テスト（`vitest run`） | PASS 228/228 |
+| ビルド（`tsc + vite build`） | PASS（dist 375.18 kB JS / gzip 88.49 kB） |
+
+### 哲学整合性チェック
+- F007 改訂 L1 実装: 早い ✓（クリップボードコピー 1 タップ）/ 簡単 ✓（催促 UI 完全撤去、妻に何も求めない）/ 便利 ✓（保管経路維持 + ファイル / 貼り付け 2 経路の対称運用）
+- 採択された Option D（L0 サイクル）の 3 語整合性を実装側でも保持
+
+### 既知未検証事項（次回 L0 レビュー時に妻の端末で確認）
+- 実機 iPhone 11 Safari スタンドアロン PWA モードでの `navigator.clipboard.writeText` 挙動（user gesture 起源の permission prompt 有無、版数差異）
+- textarea への iOS 標準「貼り付け」ジェスチャ実動作
+- トーストの 3 秒滞在 + `pointer-events: none` がスクロール / タップを阻害しないこと
+
+---
+
 ## 2026-05-17 (LC=1 バックアップ機構クリップボード化 L0 改修サイクル)
 
 ### 改訂（F007 バックアップ機構の全面置換）
