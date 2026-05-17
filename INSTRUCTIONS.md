@@ -16,7 +16,7 @@
 2. **シマエナガバッジ催促 UI を撤去**（30 日経過判定・`lastExport` state ごと削除）
 3. **復元 UI に「クリップボードから復元」経路を追加**（ファイル復元経路は互換維持）
 4. **「バックアップをコピー」ボタンをストックリスト折りたたみ内に配置**
-5. **トースト UI を新規追加**（コピー成功 / 失敗 / 復元成功）
+5. **トースト UI を新規追加**（対象は **コピー成功 / コピー失敗の 2 種のみ**。復元成功・失敗は SPEC §「復元時の共通挙動」に従い `BackupRestore` 内のインライン `<output>` / `role="alert"` の既存パターンを維持する）
 6. **旧 localStorage キー `cookpato:lastExport:v1` を初回起動時に即時削除**
 
 哲学整合（INDEX.md / CLAUDE.md）：
@@ -91,7 +91,7 @@ SPEC §「データモデル進化（旧キーの即時削除）」：
 
 - **ファイルごと削除**（`src/components/BackupBadge.tsx`）
 - `src/assets/shimaenaga-backup.png` も削除して問題ない（他参照を `grep -r shimaenaga-backup src/` で確認してから）
-- 関連 CSS keyframe（`animate-shimaenaga-float` / `animate-shimaenaga-float-paused` 等）が `tailwind.config.js` / `src/index.css` にあるが、他のシマエナガ装飾（F010 空状態応援）で共用していないか確認してから削除する
+- 関連 CSS keyframe（`@keyframes shimaenaga-float` / `.animate-shimaenaga-float` / `.animate-shimaenaga-float-paused`）は **`src/index.css` のみ**に定義されている（`tailwind.config.js` 側には無い）。他のシマエナガ装飾（F010 空状態応援）で共用していないか `grep -rn "animate-shimaenaga\|shimaenaga-float" src/` で確認してから削除する
   - 共用していれば残す。BackupBadge 専用なら削除
 
 ---
@@ -146,10 +146,16 @@ SPEC §「経路 2：クリップボード貼り付け復元」より：
 - 「クリップボードから復元」ボタン
 - タップで textarea を表示（モーダルでなく折りたたみ内インライン展開を推奨。妻が直前操作を見ながら貼り付けられる）
 - textarea + 「復元」ボタン + 「キャンセル」ボタン
-- 「復元」タップで `importFromText(textareaValue)` を呼ぶ → 既存の確認ダイアログ「現在のデータを上書きします。続行しますか？」を経由 → `parseBackup` 検証 → 成功時 `api.restoreData`
+- 「復元」タップ時の順序（SPEC §「復元時の共通挙動（両経路）」に従う既存ファイル経路と同じ）：
+  1. textarea の内容を component state の `pendingText` に保持する（**この時点で `importFromText` を呼ばない**）
+  2. 既存の `ConfirmRestoreDialog`（「現在のデータを上書きします。続行しますか？」）を開く
+  3. ユーザーが「復元」を確定タップした時点で初めて `importFromText(pendingText)` を呼ぶ → `parseBackup` 検証 → 成功時 `api.restoreData`
+  4. キャンセル時は `pendingText` を null に戻すだけで、データには触らない
+- **禁止**: 「復元」ボタン → `importFromText` 即時実行（確認前にデータ上書きが起きるため。既存ファイル経路の `BackupRestore.confirmRestore` パターンを踏襲する）
 
 ### 経路 1（ファイル復元）の維持
-- 既存の `<input type="file">` 経路はそのまま温存
+- 既存の `<input type="file" accept="application/json,.json">` 起動経路・確認ダイアログ・成功 / エラー表示パターンはそのまま温存
+- **ボタン文言の変更**: 既存ラベル「バックアップから復元」→ **「ファイルから復元」** に改める（SPEC §「経路 1：ファイル復元」の定義に合わせる）。下記 UI 構造の通り、新規の「クリップボードから復元」と並べた時に 2 経路を文言で区別できるようにする
 - 過去に `<a download>` で書き出された JSON ファイルからの**読み取り互換**を保証（SPEC §「経路 1：ファイル復元（旧仕様の互換維持）」）
 
 ### UI 構造
@@ -200,7 +206,10 @@ SPEC §「経路 2：クリップボード貼り付け復元」より：
 - **追加する describe**:
   - `serializeBackup`: 既存維持（インデント 2 / round-trip）
   - `parseBackup`: 既存維持（空拒否 / coerce 経由）
-  - 必要なら `useBackup.copyToClipboard` のフックテスト（`navigator.clipboard.writeText` を vi.mock）
+  - **`useBackup.copyToClipboard` のフックテスト（必須、2 ケース）**:
+    - 成功ケース: `navigator.clipboard.writeText` を vi.mock で resolve させ、(a) `writeText` に渡された引数が `serializeBackup(api.data)` と一致すること（正しい JSON ペイロード）、(b) 戻り値が `"ok"` であることを assert
+    - 失敗ケース: `navigator.clipboard.writeText` を vi.mock で reject させ、戻り値が `"fail"` であり例外が外に漏れないことを assert
+    - 上記 2 ケースは L1 完了の必須受け入れ条件（成功 / 失敗でユーザー表示トーストが分岐するため、未検証のままマージ不可）
 
 ### `tests/storage.test.ts`
 - `loadLastExport` / `saveLastExport` のテストを削除
