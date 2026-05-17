@@ -4,10 +4,11 @@
  * 成功 / 失敗に応じてトーストを発火する。
  */
 import type { CopyResult } from "../hooks/useBackup";
+import type { ToastKind } from "./Toast";
 
 type Props = {
   onCopy: () => Promise<CopyResult>;
-  onToast: (message: string, kind: "info" | "error") => void;
+  onToast: (message: string, kind: ToastKind) => void;
 };
 
 const SUCCESS_MESSAGE = "コピーしました。Keep メモやメモ帳に貼り付けて保管してください";

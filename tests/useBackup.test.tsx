@@ -31,7 +31,9 @@ function makeApi(data: AppData, restoreData: RestoreSpy) {
 }
 
 describe("useBackup.copyToClipboard", () => {
-  const originalClipboard = navigator.clipboard;
+  // jsdom 既定では navigator.clipboard が undefined のことがあるため、
+  // 復元時は falsy でも必ずグローバル状態をリセットしてモック漏れを防ぐ。
+  const originalDescriptor = Object.getOwnPropertyDescriptor(navigator, "clipboard");
 
   beforeEach(() => {
     // jsdom の navigator.clipboard は read-only descriptor のため defineProperty で差し替える
@@ -42,11 +44,12 @@ describe("useBackup.copyToClipboard", () => {
   });
 
   afterEach(() => {
-    if (originalClipboard) {
-      Object.defineProperty(navigator, "clipboard", {
-        value: originalClipboard,
-        configurable: true,
-      });
+    if (originalDescriptor) {
+      Object.defineProperty(navigator, "clipboard", originalDescriptor);
+    } else {
+      // 元々 descriptor が無かった環境では削除して元状態に戻す
+      // biome-ignore lint/performance/noDelete: navigator はプロトタイプチェーン上の特殊オブジェクトで delete が必要
+      delete (navigator as unknown as { clipboard?: unknown }).clipboard;
     }
   });
 

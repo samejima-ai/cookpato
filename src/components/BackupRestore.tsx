@@ -62,6 +62,8 @@ export function BackupRestore({ importFromText }: Props) {
   function cancelPaste() {
     setPasteOpen(false);
     setPasteText("");
+    // 「貼り付けてください」等のエラー文言を引き継がない（次回開いた時にクリア状態にする）
+    setError(null);
   }
 
   function submitPaste() {

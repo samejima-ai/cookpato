@@ -109,7 +109,8 @@ input[type="search"] {
 /*
  * トースト（F007 クリップボードコピー通知）のフェード。
  * 出現 150ms、滞在中（3 秒）は静止、自動消去のため out 演出は不要。
- * `motion-safe:` プレフィックスで prefers-reduced-motion 時は適用されない。
+ * prefers-reduced-motion は CSS 側で直接無効化する（Tailwind の motion-safe:
+ * プレフィックスは Tailwind ユーティリティ専用で、カスタム class には効かない）。
  */
 @keyframes toast-fade {
   from {
@@ -123,4 +124,9 @@ input[type="search"] {
 }
 .animate-toast-fade {
   animation: toast-fade 150ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-toast-fade {
+    animation: none;
+  }
 }

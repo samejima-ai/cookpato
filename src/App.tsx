@@ -25,9 +25,11 @@ const SWAP_FLASH_MS = 150;
 export default function App() {
   const api = useAppData();
   const backup = useBackup(api);
-  const [toast, setToast] = useState<{ message: string; kind: ToastKind } | null>(null);
+  // `id` を毎回インクリメントして Toast に `key` として渡す。連続コピー時に
+  // 既存トーストの 3 秒タイマーが新メッセージで上書きされず、確実にリセットされる。
+  const [toast, setToast] = useState<{ id: number; message: string; kind: ToastKind } | null>(null);
   const showToast = useCallback((message: string, kind: ToastKind) => {
-    setToast({ message, kind });
+    setToast((prev) => ({ id: (prev?.id ?? 0) + 1, message, kind }));
   }, []);
   const dismissToast = useCallback(() => setToast(null), []);
   const [query, setQuery] = useState("");
@@ -257,7 +259,9 @@ export default function App() {
           restoreSlot={<BackupRestore importFromText={backup.importFromText} />}
         />
       </main>
-      {toast && <Toast message={toast.message} kind={toast.kind} onDismiss={dismissToast} />}
+      {toast && (
+        <Toast key={toast.id} message={toast.message} kind={toast.kind} onDismiss={dismissToast} />
+      )}
     </div>
   );
 }
