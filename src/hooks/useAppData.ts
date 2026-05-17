@@ -110,13 +110,14 @@ function linesAreEmpty(lines: DayMeals["lines"]): boolean {
 /**
  * その日が「丸ごと空」か（lines も memo も実質的に未入力）。
  * F012 スワップの「両方空ならノーオペ」判定に使う。
- * auto-generated 4 空行（全 text === ""）も memo なしなら空扱いとする。
+ * 「空行」の意味論は他経路（`setMealsText` / `updateLineAt`）と揃えて
+ * `text === "" && !done` を空とみなす（手動 toggleLine 等で発生し得る done=true な空行を排除）。
  */
 function isCompletelyEmptyDay(day: DayMeals | undefined): boolean {
   if (!day) return true;
   if (day.memo && day.memo !== "") return false;
   if (day.lines.length === 0) return true;
-  return day.lines.every((l) => l.text === "");
+  return day.lines.every((l) => l.text === "" && !l.done);
 }
 
 /**
@@ -387,7 +388,9 @@ export function useAppData(): AppDataApi {
     (date: DateKey, lineIndex: number, where: "above" | "below"): number => {
       const day = stateRef.current.data.meals[date];
       const before = day?.lines ?? [];
-      // 範囲：above は 0..length、below は 1..length（end を超えるなら length にクランプ）
+      // 範囲：above も below も 0..length にクランプする。
+      // - above: lineIndex を [0, length] にクランプ
+      // - below: lineIndex+1 を [0, length] にクランプ（負値の lineIndex も 0 に丸まる）
       // 仕様上は wobble メニュー経由でのみ呼ばれ既存行を対象とするが、念のためクランプする
       const insertIdx =
         where === "above"
@@ -441,10 +444,12 @@ export function useAppData(): AppDataApi {
           return;
         }
         // sourceDay は非 undefined（isCompletelyEmptyDay の早期 return で保証）
-        // 受け取り側に DayMeals を複製して書き込む（memo の有無を保ち、参照共有を避ける）
+        // 受け取り側に DayMeals を新規生成し、lines 配列も slice で複製して書き込む。
+        // 元配列の参照共有を避けることで、将来 lines を mutate する経路が出ても
+        // スワップ元側に副作用が漏れないことを保証する（要素 MealLine は immutable 運用のため shallow で十分）。
         // biome-ignore lint/style/noNonNullAssertion: isCompletelyEmptyDay で undefined を排除済
         const src = sourceDay!;
-        const next: DayMeals = { lines: src.lines };
+        const next: DayMeals = { lines: src.lines.slice() };
         if (src.memo !== undefined) next.memo = src.memo;
         nextMeals[target] = next;
       };
