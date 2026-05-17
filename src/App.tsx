@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { BackupCopyButton } from "./components/BackupCopyButton";
-import { BackupRestore } from "./components/BackupRestore";
+import { BackupSheet } from "./components/BackupSheet";
 import { Calendar } from "./components/Calendar";
 import { FloatingEditor } from "./components/FloatingEditor";
 import { SearchBar } from "./components/SearchBar";
@@ -255,8 +254,13 @@ export default function App() {
         />
         <StockList
           api={api}
-          copySlot={<BackupCopyButton onCopy={backup.copyToClipboard} onToast={showToast} />}
-          restoreSlot={<BackupRestore importFromText={backup.importFromText} />}
+          backupSlot={
+            <BackupSheet
+              onCopy={backup.copyToClipboard}
+              importFromText={backup.importFromText}
+              onToast={showToast}
+            />
+          }
         />
       </main>
       {toast && (

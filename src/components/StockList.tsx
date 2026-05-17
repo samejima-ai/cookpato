@@ -10,15 +10,13 @@ import type { StockItem } from "../types";
 
 type Props = {
   api: AppDataApi;
-  /** 折りたたみ展開時に末尾へ描画する任意スロット（バックアップコピーボタン等） */
-  copySlot?: React.ReactNode;
-  /** 折りたたみ展開時に末尾へ描画する任意スロット（バックアップ復元ボタン等） */
-  restoreSlot?: React.ReactNode;
+  /** 折りたたみ展開時に末尾へ描画する任意スロット（バックアップ操作 modal 起動ボタン等） */
+  backupSlot?: React.ReactNode;
 };
 
 const LONG_PRESS_MS = 500;
 
-export function StockList({ api, copySlot, restoreSlot }: Props) {
+export function StockList({ api, backupSlot }: Props) {
   // 起動時は「閉」状態。妻が献立メモ操作中はストックリストが画面を占有しないよう、
   // 必要な時だけタップで展開する（SPEC「ストックリスト」改訂）。
   const [expanded, setExpanded] = useState(false);
@@ -505,8 +503,7 @@ export function StockList({ api, copySlot, restoreSlot }: Props) {
               追加
             </button>
           </div>
-          {copySlot}
-          {restoreSlot}
+          {backupSlot}
         </div>
       </div>
     </div>

@@ -1,5 +1,48 @@
 # 変更履歴
 
+## 2026-05-17 (LC=1 F007 改訂2 — 動作確認フィードバック対応・popup 化サイクル)
+
+動作確認後の妻側フィードバック「ストック内でのストック以外のスクロールは嫌」を受け、
+ストック折りたたみ内インライン配置 → 単一「バックアップ」ボタン + 中央 modal 集約に再設計。
+
+### 追加
+- `src/components/BackupSheet.tsx` 新規。ストック折りたたみ内の「バックアップ」エントリボタン + 中央 modal を統合。modal 内に「バックアップをコピー」「ファイルから復元」「クリップボードから復元」3 操作を集約。背景タップ / Escape / × で閉じる。コピー成功時 modal 自動クローズ + トースト、失敗時 modal 開いたまま + エラートースト。復元成功はインライン `<output>` 3 秒（modal 開いたまま）
+
+### 変更
+- `SPEC.md` §「バックアップ」を全面改訂：見出しを「クリップボード方式 + modal 集約、2026-05-17 改訂2」に変更、概要に「妻の動作確認フィードバック受領」を明記、「エントリ UI」サブセクション新設、復元 UI を「modal 内 2 経路」に書き換え、トースト a11y / `prefers-reduced-motion` の CSS 直接処理（Tailwind `motion-safe:` は不適）も SPEC に反映
+- `src/components/StockList.tsx`：`copySlot?: ReactNode` + `restoreSlot?: ReactNode` → 単一 `backupSlot?: ReactNode` に統合
+- `src/App.tsx`：`BackupCopyButton` + `BackupRestore` 注入を廃止し、単一 `<BackupSheet>` を `backupSlot` に注入
+- `INDEX.md` 機能一覧の F007 説明を「ボタン → modal」型に更新
+- `history/SUMMARY.md` の F007 説明を改訂2 反映に更新
+
+### 廃止（コード撤去完了）
+- `src/components/BackupCopyButton.tsx` をファイルごと削除（BackupSheet にロジック吸収）
+- `src/components/BackupRestore.tsx` をファイルごと削除（BackupSheet にロジック吸収）
+
+### 体制
+- 判定: M1 維持 (S=2, U=0, R=1, N=1)
+- 事後評価: 妥当。妻の動作確認フィードバック → 1 サイクルで SPEC 改訂 + 実装まで完遂
+
+### 儀式記録（本サイクルの振り返り儀式）
+- レベル: 1（LC=1、軽微な UX 改善 + SPEC 改訂を伴う）
+- スキップ: なし
+- 検出件数: 矛盾 0 / 復活要求 0 / 再提案 0
+
+### 計算的センサー結果
+| 検査 | 結果 |
+|---|---|
+| 型チェック（`tsc --noEmit`） | PASS |
+| Lint（`biome check`） | PASS |
+| Format（`biome format`） | PASS |
+| テスト（`vitest run`） | PASS 228/228 |
+| ビルド（`tsc + vite build`） | PASS |
+
+### 哲学整合性チェック
+- F007 改訂2: 早い ✓（ボタン 1 タップで modal、コピー成功で自動クローズ）/ 簡単 ✓（ストック領域がボタン 1 つだけのシンプル状態に戻る、迷わない）/ 便利 ✓（3 操作の集約で「バックアップ系」のメンタルモデルが 1 個所に）
+- 妻フィードバック「ストック以外のスクロール嫌」は「簡単」の損失 → 改訂2 で解消
+
+---
+
 ## 2026-05-17 (LC=1 F007 クリップボードバックアップ L1 実装サイクル)
 
 ### 追加

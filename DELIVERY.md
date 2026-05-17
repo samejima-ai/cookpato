@@ -339,3 +339,47 @@ L1 申し送り（PR #35、INSTRUCTIONS.md）に従い、9 タスクを実装。
 - 妥当。INSTRUCTIONS.md（PR #35）が機能×タスク粒度で完全に確定しており、迷う場面はなかった
 - 独立検証 agent の不在による品質劣化はなし（自己検証＋計算センサーで十分捕捉、Copilot レビューも L0 段階で 5 件取り込み済）
 - L2 発動閾値には遠い（変更ファイル数 9、新規行 +400 程度、削除 +200 程度）。次回サイクルも M1 で問題ない見込み
+
+---
+
+### 2026-05-17: F007 改訂2 — 動作確認フィードバック対応 popup 化（L0+L1 1 サイクル）
+
+PR #36 で実装した F007 を妻が動作確認したところ、「ストック内でのストック以外のスクロール
+は嫌」「ボタンを置いてポップアップ表示でバックアップ操作するように」とのフィードバック。
+SPEC 改訂 + L1 実装を 1 サイクルで実施。
+
+#### 変更点
+
+**SPEC.md §「バックアップ」全面改訂（改訂2）**
+- 見出し「バックアップ（クリップボード方式 + modal 集約、2026-05-17 改訂2）」
+- 新サブセクション「エントリ UI」追加：ストック折りたたみ内に「バックアップ」ボタン 1 個 → 中央 modal（既存 ConfirmRestoreDialog 同パターン）
+- §「エクスポート UI」更新：modal 内に「バックアップをコピー」ボタン、成功時 modal 自動クローズ + トースト 3 秒、失敗時 modal 開いたままリトライ
+- §「復元 UI」更新：modal 内に 2 経路（ファイル + 貼り付け）を縦並び、textarea 展開も modal 内
+- §「復元時の共通挙動」更新：modal 内インライン `<output>` 3 秒（modal 開いたまま、× で閉じる）、確認ダイアログは modal の上層に z-index 60 で重ねる
+- トースト a11y / `prefers-reduced-motion` の CSS 直接処理（Tailwind `motion-safe:` 非適用問題）を SPEC に反映
+
+**コード変更**
+- `src/components/BackupSheet.tsx` 新規（エントリボタン + modal + ConfirmRestoreDialog を統合した単一ファイル）
+- `src/components/BackupCopyButton.tsx` 削除（BackupSheet にロジック吸収）
+- `src/components/BackupRestore.tsx` 削除（BackupSheet にロジック吸収）
+- `src/components/StockList.tsx`：`copySlot` + `restoreSlot` → 単一 `backupSlot` プロップに統合
+- `src/App.tsx`：`<BackupSheet>` を `backupSlot` に注入
+- `INDEX.md` / `history/SUMMARY.md` の F007 説明文を改訂2 反映
+
+#### センサー結果（全 5 項目 pass）
+| コマンド | 結果 |
+|---|---|
+| `npm run typecheck` | ✅ |
+| `npm run lint` | ✅ |
+| `npm run format:check` | ✅ |
+| `npm test` | ✅ 228/228（テスト件数変化なし。useBackup API 不変のため既存テストすべて pass）|
+| `npm run build` | ✅（バンドル中立。BackupSheet 単一ファイル化で実装量はやや増えたが BackupCopyButton + BackupRestore 削除で相殺）|
+
+#### 哲学整合（INDEX.md / CLAUDE.md「早い・簡単・便利」）
+- **早い** ✓ — ボタン 1 タップで modal、コピー成功で自動クローズして元に戻る
+- **簡単** ✓ — ストック領域が「バックアップ」ボタン 1 つだけのシンプル状態に。妻の「ストック以外のスクロール嫌」フィードバックを構造的に解消（操作群が modal に閉じる）
+- **便利** ✓ — 3 操作（コピー / ファイル復元 / 貼り付け復元）が同じ modal 内に並ぶ。バックアップ系の動線が一貫
+
+#### 体制事後評価（M1 単体モード、L0+L1 1 サイクル運用）
+- 妥当。動作確認フィードバックという小規模なスコープに対し、SPEC 改訂 + 実装 + テスト + ドキュメント更新を 1 サイクルで完遂
+- ユーザー（妻の代理として夫）が L0 ロールを担い、modal 設計の選択肢（popup style / 内容 / entry button / SPEC 更新方針）を AskUserQuestion 経由で確定 → そのまま L1 実装に流れた
