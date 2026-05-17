@@ -516,7 +516,7 @@ EditingTarget = { kind: "line", dateKey: DateKey, lineIndex: number }
   - user gesture 起源のため iOS Safari の permission prompt は発生しない
   - 直列化は旧 `serializeBackup` 関数（インデント 2）を流用する
 - 書き込み成功後、画面下部に **インライントースト** を表示する：
-  - メッセージ：「コピーしました。LINE Keep やメモ帳に貼り付けて保管してください」
+  - メッセージ：「コピーしました。Keep メモやメモ帳に貼り付けて保管してください」（「Keep メモ」は LINE 内の自分専用チャット。旧「LINE Keep」サービスは終了済のため呼称を改める）
   - 表示時間：3 秒、自動消去
   - 哲学者の補強（Council #33 補強案）：「コピー」と「保存」のメンタルモデルを橋渡しする
   - トーストは `pointer-events: none` で操作を妨げない。`prefers-reduced-motion` でフェードを無効化
@@ -540,15 +540,16 @@ EditingTarget = { kind: "line", dateKey: DateKey, lineIndex: number }
 
 ##### 復元時の共通挙動（両経路）
 - 確認ダイアログ「現在のデータを上書きします。続行しますか？」→「復元」「キャンセル」
-- 「復元」タップで JSON をパースして `coerceAppData` で検証 → 成功時にプライマリ localStorage に書き込み + state 全更新
+- 「復元」タップで JSON をパースして検証 → 既存の **`parseBackup`**（`src/lib/backup.ts`）を使う。`parseBackup` は内部で `coerceAppData` を呼び出した上で「実質空（lines/stock/favorites/completedWeeks すべて空）」をエラーとして弾くため、malformed JSON や空 JSON で現データが空に上書きされる事故を防ぐ。**`coerceAppData` を直接使ってはならない**（sanitizer であり、不正形状でも `initialData()` を返してしまうため検証用途に不適）。成功時にプライマリ localStorage に書き込み + state 全更新
 - 成功時はインライン成功メッセージ「バックアップから復元しました」を 3 秒表示
 - 検証失敗時はエラーメッセージを表示、現在のデータは変更しない
 
 ##### データモデル進化（旧キーの即時削除）
 - localStorage キー `cookpato:lastExport:v1` は本リリースで即時削除する
   - 旧仕様の「30 日経過判定」が廃止されたため不要
-  - schema-evolution 上は「単一フィールドの削除」で破壊的影響なし（読み手で参照していたコードと一緒に撤去する）
-  - `coerceAppData` 側で `cookpato:lastExport:v1` を読まないように撤去
+  - 実装上のコードパス：`src/lib/storage.ts` の **`loadLastExport`** / **`saveLastExport`** と、それを呼び出す **`src/hooks/useBackup.ts`** を撤去する（`src/lib/storage.ts` の `coerceAppData` は AppData プライマリキー `cookpato:data:v1` のみを扱い、`lastExport` キーには触れないため変更不要）
+  - 初回起動時の後始末として `localStorage.removeItem('cookpato:lastExport:v1')` を 1 度だけ実行し、妻の端末からも痕跡を消す（idempotent 操作）
+  - **expand-contract プロトコル例外条項**：本キーは AppData プライマリではなく「機能廃止と運命を共にするメタ情報」のため、移行先データがなく expand-contract は適用不能。「データモデル進化」セクション末尾「禁止事項」の expand-contract 義務は AppData プライマリキー（`cookpato:data:v*`）に対するもので、本ケースは例外として扱う
 - localStorage プライマリキー `cookpato:data:v1` のスキーマは変更なし（互換性 full-compat 維持）
 
 #### 廃止（本リリースで撤去）
@@ -644,7 +645,7 @@ EditingTarget = { kind: "line", dateKey: DateKey, lineIndex: number }
 - データは**完全にユーザー端末のローカル**に保存する
   - localStorage または IndexedDB を使用（HOWはLayer 1判断）
   - クラウド同期・マルチデバイス同期・サーバーへのデータ送信は一切行わない
-  - ローカル完結のバックアップ（ユーザー端末内ファイル書き出し）は採用する（→ バックアップ機能セクション参照）
+  - ローカル完結のバックアップは採用する（→ バックアップ機能セクション参照）。手段は **クリップボードコピー（エクスポート）+ ファイル/クリップボード貼り付け復元** の 2 経路。旧仕様の `<a download>` 経由ファイル書き出しは 2026-05-17 改訂で廃止済（互換のため旧ファイルからの**復元**経路は残す）
 - 日本語のみ対応
 - ARC: モノリス（固定）
 
@@ -695,5 +696,6 @@ EditingTarget = { kind: "line", dateKey: DateKey, lineIndex: number }
 ### 禁止事項
 - **expand-contract プロトコル外**での既存 localStorage キーの直接削除（妻の端末でデータ消失する）
   - 上記「デプロイ戦略 4. contract」の前提条件を全て満たした場合のみ削除可。それ以外は禁止
+  - **例外**: AppData プライマリキー（`cookpato:data:v*`）以外の「機能廃止と運命を共にするメタ情報キー」（例: 2026-05-17 改訂で廃止された `cookpato:lastExport:v1`）は、機能側のコードが同時に撤去されるため、本禁止事項の対象外とする（idempotent な `removeItem` を 1 度実行）
 - 互換性を欠く JSON スキーマでのバックアップファイル生成（過去ファイルからの復元が壊れる）
 - スキーマレジストリ等の外部サービス依存（完全ローカル原則違反）

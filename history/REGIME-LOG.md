@@ -71,13 +71,14 @@
   - 対象: シマエナガバッジ催促 UI / `<a download>` 経路 / `lastExport` キー
   - 合議＋AI根拠提示: Council #33（business Council、unanimous、judgment_confidence 0.85）で要件成立
   - 廃止根拠を INTENT.md F007「取り消し線」セクションに記録
+  - **本サイクルでの実体**: SPEC レベルでの deprecation 確定のみ。実装コード（`useBackup` / `BackupBadge` / `loadLastExport`/`saveLastExport` / `triggerDownload` / `getBackupFilename` / `shouldShowExportBanner`）の物理削除と `localStorage.removeItem('cookpato:lastExport:v1')` の実行は次サイクル L1 で行う
 - **哲学による判定**:
   - F007 改訂版: 早い ○（タップ 1 回完結、OS ダイアログなし）/ 簡単 ○（催促 UI なし、妻に何も求めない）/ 便利 ○（保険経路を維持）
   - 採択案 (Option D) は 3 語すべてに寄与、却下 3 案 (A/B/C) はそれぞれ 1 語以上を毀損
 - **次回示唆**:
   - L1 実装サイクル: `useBackup` クリップボード化 + `BackupBadge` 削除 + ストック内ボタン追加 + トースト UI（CHANGELOG「次サイクル申し送り」参照）
   - F007 周辺コード（`src/lib/backup.ts` / `src/hooks/useBackup.ts` / `src/components/BackupBadge.tsx`）の純減が見込まれ、L1 サイクルでコード行数が減る可能性が高い
-  - 実機（iPhone 11 / iOS Safari）で `navigator.clipboard.writeText` の動作確認、特に LINE Keep への貼り付け運用が妻に定着するかを観察
+  - 実機（iPhone 11 / iOS Safari）で `navigator.clipboard.writeText` の動作確認、特に **Keep メモ（LINE 内の自分専用チャット）**やメモアプリへの貼り付け運用が妻に定着するかを観察（旧 LINE Keep サービスは終了済のため対象から外す）
 
 ---
 

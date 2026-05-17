@@ -5,7 +5,7 @@
 ### 改訂（F007 バックアップ機構の全面置換）
 - SPEC.md「バックアップ」セクション全面書き換え：
   - エクスポート: `<a download>` + 週番号付きファイル名 → `navigator.clipboard.writeText` でクリップボードコピー
-  - フィードバック: シマエナガバッジ催促 → コピー成功時のインライントースト「LINE Keep やメモ帳に貼り付けて保管してください」3 秒（哲学者の補強案、Council #33）
+  - フィードバック: シマエナガバッジ催促 → コピー成功時のインライントースト「Keep メモやメモ帳に貼り付けて保管してください」3 秒（哲学者の補強案、Council #33。旧「LINE Keep」表記は同サービス終了済のため「Keep メモ」＝LINE 内の自分専用チャットに改めた）
   - 復元 UI: ファイル経路（旧仕様の互換維持）+ クリップボード貼り付け経路（新規、textarea）の 2 経路
   - データモデル進化: localStorage キー `cookpato:lastExport:v1` を即時削除
 - INDEX.md 機能一覧の文言を「クリップボードコピー + ファイル/貼り付け復元」に更新
@@ -13,11 +13,12 @@
 - DONT.md「哲学による却下判断」表に Council #33 で却下された 3 案（Web Share / OPFS / 催促 UI 維持）を追加
 - history/INTENT.md F007 を改訂版に書き換え、廃止要素を取り消し線で記録、却下案を Council 経緯と合わせて追加
 
-### 廃止（本サイクル）
-- シマエナガバッジ催促 UI（旧 PR #29-#30 の歩行アニメ含む全機能）
-- 30 日経過判定（`shouldShowExportBanner` / `lastExport` state）
-- `<a download>` 経由のファイル書き出し（`triggerDownload` / `getBackupFilename` / ISO 週番号生成）
-- localStorage キー `cookpato:lastExport:v1`
+### 廃止（**SPEC レベルの deprecation のみ。コード削除は次サイクル L1**）
+本サイクルは L0 のみで、以下は仕様文書上で「廃止」と確定したもの。実装コードの物理削除と `localStorage.removeItem('cookpato:lastExport:v1')` の実行は L1 申し送り項目で次サイクルに行う。
+- シマエナガバッジ催促 UI（旧 PR #29-#30 の歩行アニメ含む全機能）— SPEC 削除済、コード削除は L1
+- 30 日経過判定（`shouldShowExportBanner` / `lastExport` state）— 仕様削除済、実装撤去は L1
+- `<a download>` 経由のファイル書き出し（`triggerDownload` / `getBackupFilename` / ISO 週番号生成）— 仕様削除済、実装撤去は L1
+- localStorage キー `cookpato:lastExport:v1` — 仕様廃止確定、`removeItem` 実行は L1
 
 ### 体制
 - 判定: M1 維持 (S=2, U=0, R=1, N=1)
