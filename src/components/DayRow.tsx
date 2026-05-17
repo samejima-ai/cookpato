@@ -139,7 +139,11 @@ export function DayRow({
           role="button"
           tabIndex={0}
           aria-label={`${formatDayLabel(dateKey)}（長押しで日付ごと入れ替え）`}
-          className={`rounded transition-colors ${
+          // 日付ラベルは自動生成・選択不要。iOS Safari の長押し時にテキスト選択 /
+          // Copy/Look Up コールアウトが出るのを抑止する（touch-callout は Tailwind に
+          // 対応 utility がないため inline style で指定）
+          style={{ WebkitTouchCallout: "none" }}
+          className={`rounded transition-colors select-none ${
             isSwapSource ? "bg-blue-50 ring-2 ring-blue-300" : isSwapFlash ? "bg-green-50" : ""
           }`}
           onMouseDown={() => {
