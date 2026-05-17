@@ -254,7 +254,7 @@ export default function App() {
         />
         <StockList
           api={api}
-          backupSlot={
+          backupTrigger={
             <BackupSheet
               onCopy={backup.copyToClipboard}
               importFromText={backup.importFromText}

@@ -1,5 +1,53 @@
 # 変更履歴
 
+## 2026-05-17 (LC=1 F007 改訂3 — swipe-reveal 化サイクル)
+
+動作確認後の妻側フィードバック「バックアップはスライドしたら出るけど自然に隠れる動作にして。
+引っ張って 3 秒後には隠れる感じ」を受け、常時表示の「バックアップ」ボタンを
+ストックヘッダー swipe で 3 秒だけ slide-in する形に変更。
+
+### 追加
+- `src/components/StockList.tsx` にヘッダー vertical swipe 検出（>= 30px）+ reveal タイマー（3 秒）を追加
+  - `pointerdown` / `pointermove` / `pointerup` / `pointercancel` で `|dy|` の最大値を測り、`pointerup` 時点で 30px 以上なら `revealBackup()` 発火
+  - `lastSwipeRevealAtRef` で直近 reveal 時刻を覚え、200ms 以内の `onClick` は無視（swipe と tap の干渉防止）
+  - `revealTimerRef` で 3 秒タイマー、unmount 時に掃除
+  - `BACKUP_REVEAL_THRESHOLD_PX = 30` / `BACKUP_REVEAL_DURATION_MS = 3000` 定数
+- `StockList` JSX の最下層に `<div className="absolute top-0 right-0 ...">` で `backupTrigger` を配置。`translate-x` + `opacity` の 200ms ease-out trans で slide-in/out
+
+### 変更
+- `StockList` Props: `backupSlot?: ReactNode` → `backupTrigger?: ReactNode` に rename + 配置位置を「折りたたみ body 末尾」→「ヘッダー右端 absolute 重ね」に変更
+- `App.tsx` の prop 名を追従（`backupSlot` → `backupTrigger`）
+- `SPEC.md` §「バックアップ」を改訂3 へ：見出しに「+ swipe-reveal」追加、§「エントリ UI」サブセクションを全面書き換え（swipe 検出条件、200ms tap 干渉防止、3 秒タイマー起点、設計判断）
+- `INDEX.md` / `history/SUMMARY.md` の F007 説明文を改訂3 反映に更新
+- `StockList` の最外 wrapper に `relative` 追加（backup trigger の absolute 位置決め用）
+
+### 廃止
+- ストック折りたたみ body 末尾の `backupSlot` 描画箇所（不要、ヘッダー swipe-reveal に移動）
+
+### 体制
+- 判定: M1 維持 (S=2, U=0, R=1, N=1)
+- 事後評価: 妥当。妻の動作確認フィードバック → SPEC 改訂 + 実装まで 1 サイクルで完遂、テスト破損なし
+
+### 儀式記録
+- レベル: 1（LC=1、UX 微調整 + SPEC 改訂）
+- スキップ: なし
+- 検出件数: 矛盾 0 / 復活要求 0 / 再提案 0
+  - 注：`StockList` のヘッダー周りで「テスト破損リスク」を最初に発生させた（最外 wrapper に `<div className="relative">` を挟んだことで `header.nextElementSibling === accordion` が崩れた）が、`<div>` を outer の outer に統合する形で構造を保ち、テストすべて pass に戻した
+
+### 計算的センサー結果
+| 検査 | 結果 |
+|---|---|
+| 型チェック（`tsc --noEmit`） | PASS |
+| Lint（`biome check`） | PASS |
+| Format（`biome format`） | PASS |
+| テスト（`vitest run`） | PASS 228/228 |
+| ビルド（`tsc + vite build`） | PASS |
+
+### 哲学整合性チェック
+- F007 改訂3: 早い ✓（swipe 1 回で出る、tap 1 回で modal）/ 簡単 ✓（普段は完全に隠れる → メンタル負荷ゼロ、緊急時の保険感が伝わる）/ 便利 ✓（バックアップ機能の発見性は若干下がるが、ユーザーが望んで作ったジェスチャなので学習コストは低い）
+
+---
+
 ## 2026-05-17 (LC=1 F007 改訂2 — 動作確認フィードバック対応・popup 化サイクル)
 
 動作確認後の妻側フィードバック「ストック内でのストック以外のスクロールは嫌」を受け、

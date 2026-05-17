@@ -383,3 +383,53 @@ SPEC 改訂 + L1 実装を 1 サイクルで実施。
 #### 体制事後評価（M1 単体モード、L0+L1 1 サイクル運用）
 - 妥当。動作確認フィードバックという小規模なスコープに対し、SPEC 改訂 + 実装 + テスト + ドキュメント更新を 1 サイクルで完遂
 - ユーザー（妻の代理として夫）が L0 ロールを担い、modal 設計の選択肢（popup style / 内容 / entry button / SPEC 更新方針）を AskUserQuestion 経由で確定 → そのまま L1 実装に流れた
+
+---
+
+### 2026-05-17: F007 改訂3 — swipe-reveal 化（L0+L1 1 サイクル）
+
+改訂2 で動作確認後、妻側フィードバック「バックアップはスライドしたら出るけど自然に隠れる
+動作にして。引っ張って 3 秒後には隠れる感じ」を受け、常時表示の「バックアップ」ボタンを
+ストックヘッダー swipe で 3 秒だけ slide-in する形にさらに変更。
+
+#### 変更点
+
+**SPEC.md §「バックアップ」改訂3**
+- 見出し「クリップボード方式 + modal 集約 + swipe-reveal、2026-05-17 改訂3」
+- §「エントリ UI」を全面書き換え：vertical swipe (≥30px) で slide-in、出現から 3 秒で自動 slide-out、tap 干渉防止（200ms 以内の onClick 無視）、ヘッダー tap は既存挙動（折りたたみ開閉）維持
+
+**コード変更**
+- `src/components/StockList.tsx`：
+  - 新 state `backupRevealed` + refs (`swipeStartYRef` / `swipeMaxDyRef` / `revealTimerRef` / `lastSwipeRevealAtRef`)
+  - 新ハンドラ `handleHeaderPointerDown` / `handleHeaderPointerMove` / `handleHeaderPointerUp` / `handleHeaderPointerCancel` / `handleHeaderClick` / `revealBackup`
+  - `BACKUP_REVEAL_THRESHOLD_PX = 30` / `BACKUP_REVEAL_DURATION_MS = 3000` 定数
+  - Props 名変更 `backupSlot` → `backupTrigger`
+  - 最外 wrapper に `relative` 追加、最下層に `backupTrigger` を `absolute top-0 right-0` で配置、`translate-x` + `opacity` の 200ms ease-out トランジション
+  - 折りたたみ body 末尾の旧 `backupSlot` 描画箇所を削除
+- `src/App.tsx`：prop 名追従（`backupSlot` → `backupTrigger`）
+
+**INDEX.md / history/SUMMARY.md / history/CHANGELOG.md**
+- F007 説明文を改訂3 反映に更新（swipe-reveal 動線、3 秒自動 hide、画面占有ゼロ）
+
+#### センサー結果（全 5 項目 pass）
+| コマンド | 結果 |
+|---|---|
+| `npm run typecheck` | ✅ |
+| `npm run lint` | ✅ |
+| `npm run format:check` | ✅ |
+| `npm test` | ✅ 228/228（変化なし、`StockList` の DOM 構造を保ち既存 test と互換維持）|
+| `npm run build` | ✅ |
+
+#### 既知未検証事項
+- 実機 iPhone 11 Safari での vertical swipe 検出（pointer events の挙動と touch-action 干渉）。30px しきい値で誤検知 / 取りこぼしが少ないかを実機確認推奨
+- swipe 中に指がヘッダー領域を外れた場合の挙動（`pointercancel` で正しく state がリセットされるか）
+- スクロール容器との干渉（ストック折りたたみ body 内の `overflow-y-auto` への影響なし、ヘッダーは独立要素なので問題ない見込み）
+
+#### 哲学整合（INDEX.md / CLAUDE.md「早い・簡単・便利」）
+- **早い** ✓ — swipe 1 回でボタン出現、tap 1 回で modal
+- **簡単** ✓ — 普段は完全に隠れる。妻のメンタル負荷ゼロ（緊急時の保険感を視覚的に強化）
+- **便利** ✓ — バックアップ機能の発見性は若干下がるが、ユーザーが望んで作ったジェスチャなので学習コストは低い。隠れていることで「あること自体は知っている」という安心感だけ残る
+
+#### 体制事後評価（M1 単体モード、L0+L1 1 サイクル）
+- 妥当。SPEC 改訂 + 実装 + テスト維持を 1 サイクルで完遂
+- swipe gesture / tap 干渉の判定など実装上の細部判断（200ms 閾値、30px しきい値）も SPEC に記録してドリフト防止
