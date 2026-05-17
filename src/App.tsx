@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { BackupBadge } from "./components/BackupBadge";
 import { BackupRestore } from "./components/BackupRestore";
 import { Calendar } from "./components/Calendar";
@@ -34,6 +34,15 @@ export default function App() {
   const [swapSource, setSwapSource] = useState<DateKey | null>(null);
   // F012: スワップ完了直後のフラッシュ対象 2 日。null なら非表示
   const [swapFlashDates, setSwapFlashDates] = useState<ReadonlySet<DateKey> | null>(null);
+  // F012: 連続スワップで先発 timeout が後発フラッシュを途中で消さないため timer id を保持
+  const swapFlashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // アンマウント時に未発火 timeout をクリーンアップ
+  useEffect(
+    () => () => {
+      if (swapFlashTimerRef.current) clearTimeout(swapFlashTimerRef.current);
+    },
+    [],
+  );
   const hits = useSearch(api.data, query);
 
   // 編集対象（line のみ）の現状 text を取得し、FloatingEditor に渡す
@@ -175,8 +184,13 @@ export default function App() {
       setSwapSource(null);
       // SPEC: 両方空ならフラッシュも発火しない
       if (!bothEmpty) {
+        // 前回のクリア timeout を破棄してから新規にセット（連続スワップで途中消えるのを防ぐ）
+        if (swapFlashTimerRef.current) clearTimeout(swapFlashTimerRef.current);
         setSwapFlashDates(new Set([source, dateKey]));
-        window.setTimeout(() => setSwapFlashDates(null), SWAP_FLASH_MS);
+        swapFlashTimerRef.current = window.setTimeout(() => {
+          setSwapFlashDates(null);
+          swapFlashTimerRef.current = null;
+        }, SWAP_FLASH_MS);
       }
     },
     [api, swapSource],

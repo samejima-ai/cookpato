@@ -45,7 +45,8 @@ export type AppDataApi = {
   /**
    * 指定日の lineIndex の「上」または「下」に空行を 1 つ挿入する（F013 行間挿入）。
    * 挿入された空行の index を返す（呼び出し側が即フロート編集に渡す用）。
-   * 範囲外 index は no-op で -1 を返す。
+   * 範囲外 index は内部でクランプ（above=[0..length]、below=[0..length]）。
+   * lines が無い日に呼ぶと先頭に 1 行生まれる（仕様：呼び出し側の前提を緩める）。
    */
   insertLineAt: (date: DateKey, lineIndex: number, where: "above" | "below") => number;
   /**
@@ -151,6 +152,11 @@ export function useAppData(): AppDataApi {
   // beginMealsEdit で保存し、commitMealsEdit で「未達成 → 達成」遷移判定に使う。
   // copy-on-write な状態なので参照保持で十分（深いコピー不要）。
   const editBaselineRef = useRef<Record<DateKey, DayMeals> | null>(null);
+
+  // 最新 state への ref（useCallback の dep を空に保ちつつ、callback 内で最新値を参照したい用）
+  // insertLineAt の返り値計算で使う（setState updater の同期実行は保証されないため）
+  const stateRef = useRef(state);
+  stateRef.current = state;
 
   // 日付境界検知用の today。60s ポーリングで変化を拾い、自動生成 useEffect を再走させる。
   const [currentToday, setCurrentToday] = useState<DateKey>(() => todayKey());
@@ -375,36 +381,40 @@ export function useAppData(): AppDataApi {
 
   // F013 行間挿入：指定行の「上」または「下」に空行を 1 つ挿入する。
   // 挿入された空行の最終 index を返す（呼び出し側が即フロート編集に渡す）。
-  // `useState` の更新は非同期で setState 内のクロージャから直接 index を返せないため、
-  // 計算は updater 外で先に行ってから setState を発火する（外側で参照保持）。
+  // setState updater の同期実行は React 18 でも保証されないため、index は updater 外で
+  // ref 経由の最新 state から確定計算し、それを返す（updater 内でも同条件でクランプ）。
   const insertLineAt = useCallback(
     (date: DateKey, lineIndex: number, where: "above" | "below"): number => {
-      let insertedIndex = -1;
+      const day = stateRef.current.data.meals[date];
+      const before = day?.lines ?? [];
+      // 範囲：above は 0..length、below は 1..length（end を超えるなら length にクランプ）
+      // 仕様上は wobble メニュー経由でのみ呼ばれ既存行を対象とするが、念のためクランプする
+      const insertIdx =
+        where === "above"
+          ? Math.max(0, Math.min(lineIndex, before.length))
+          : Math.max(0, Math.min(lineIndex + 1, before.length));
       setState((prev) => {
-        const day = prev.data.meals[date];
-        const before = day?.lines ?? [];
-        // 範囲：above は 0..length（length は末尾の手前に挿入）、below は -1..length-1
-        // 仕様上は対象行（既存行）に対して呼ぶため通常範囲内だが、念のためクランプする
-        let insertIdx: number;
-        if (where === "above") {
-          insertIdx = Math.max(0, Math.min(lineIndex, before.length));
-        } else {
-          insertIdx = Math.max(0, Math.min(lineIndex + 1, before.length));
-        }
+        // updater 内は prev で再計算（バッチング時の整合性確保）。
+        // 通常 stateRef.current と prev は同一だが、二重実行や差分があっても prev が真とする。
+        const prevDay = prev.data.meals[date];
+        const prevBefore = prevDay?.lines ?? [];
+        const prevInsertIdx =
+          where === "above"
+            ? Math.max(0, Math.min(lineIndex, prevBefore.length))
+            : Math.max(0, Math.min(lineIndex + 1, prevBefore.length));
         const nextLines: MealLine[] = [
-          ...before.slice(0, insertIdx),
+          ...prevBefore.slice(0, prevInsertIdx),
           { text: "", done: false },
-          ...before.slice(insertIdx),
+          ...prevBefore.slice(prevInsertIdx),
         ];
-        insertedIndex = insertIdx;
         const nextDay: DayMeals = { lines: nextLines };
-        if (day?.memo) nextDay.memo = day.memo;
+        if (prevDay?.memo) nextDay.memo = prevDay.memo;
         return {
           ...prev,
           data: { ...prev.data, meals: { ...prev.data.meals, [date]: nextDay } },
         };
       });
-      return insertedIndex;
+      return insertIdx;
     },
     [],
   );
@@ -422,16 +432,20 @@ export function useAppData(): AppDataApi {
       if (isCompletelyEmptyDay(dayA) && isCompletelyEmptyDay(dayB)) return prev;
 
       const nextMeals = { ...prev.data.meals };
-      // 入れ替え：A の元値を B に、B の元値を A に。空（undefined）の場合は delete する
-      // （linesAreEmpty かつ memo なしのケース。日付ごと除外で他の経路と一貫）
+      // 入れ替え：A の元値を B に、B の元値を A に。
+      // 実質空（undefined / 全行 text='' かつ memo なし）なら日付ごと除外する
+      // （他経路 setMealsText / updateLineAt / deleteLine と同一の正規化、空表現を一貫）
       const writeAt = (target: DateKey, sourceDay: DayMeals | undefined) => {
-        if (sourceDay === undefined) {
+        if (isCompletelyEmptyDay(sourceDay)) {
           delete nextMeals[target];
           return;
         }
+        // sourceDay は非 undefined（isCompletelyEmptyDay の早期 return で保証）
         // 受け取り側に DayMeals を複製して書き込む（memo の有無を保ち、参照共有を避ける）
-        const next: DayMeals = { lines: sourceDay.lines };
-        if (sourceDay.memo !== undefined) next.memo = sourceDay.memo;
+        // biome-ignore lint/style/noNonNullAssertion: isCompletelyEmptyDay で undefined を排除済
+        const src = sourceDay!;
+        const next: DayMeals = { lines: src.lines };
+        if (src.memo !== undefined) next.memo = src.memo;
         nextMeals[target] = next;
       };
       writeAt(dateA, dayB);

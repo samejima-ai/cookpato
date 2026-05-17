@@ -1186,6 +1186,24 @@ describe("useAppData", () => {
       expect(result.current.data.meals["2030-01-02"]?.lines.map((l) => l.text)).toEqual(["カレー"]);
     });
 
+    it("「全行 text='' + memo なし」の DayMeals も undefined と同じく空扱いで delete される", () => {
+      // bulkAddEmptyLines が生成する形（4 空行 / memo なし）と等価のケース。
+      // 他経路（setMealsText / updateLineAt / deleteLine）と空表現を一貫させる。
+      const { result } = renderHook(() => useAppData());
+      act(() => {
+        result.current.bulkAddEmptyLines(["2030-01-02"], 4);
+        result.current.setMealsText("2030-01-01", "カレー");
+      });
+      // 2030-01-02 は 4 空行 + memo なし（isCompletelyEmptyDay は true）
+      expect(result.current.data.meals["2030-01-02"]?.lines.length).toBe(4);
+      act(() => {
+        result.current.swapDays("2030-01-01", "2030-01-02");
+      });
+      // 2030-01-01 は元 2030-01-02 の中身（空相当）を受け取る → 日付ごと delete
+      expect(result.current.data.meals["2030-01-01"]).toBeUndefined();
+      expect(result.current.data.meals["2030-01-02"]?.lines.map((l) => l.text)).toEqual(["カレー"]);
+    });
+
     it("両方空日ならノーオペ（state 識別子が変わらない）", () => {
       const { result } = renderHook(() => useAppData());
       // 2030-01-01 / 2030-01-02 とも未定義
