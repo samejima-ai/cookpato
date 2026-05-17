@@ -87,6 +87,27 @@ React の `onPointerUp` / `onPointerCancel` は、**要素内でリリースさ�
 
 ---
 
+## 5. 表示専用テキストの長押しでテキスト選択 / Copy コールアウトが出る
+
+### 症状
+日付ラベル等「自動生成で編集不要」のテキストを長押しすると、iOS Safari がテキストを選択状態にし、Copy / Look Up（辞書）コールアウトが出てしまう。長押しを独自ジェスチャ（スワップ等）に当てている場合、本来の挙動を阻害する。
+
+### 原因
+- `user-select: text`（CSS デフォルト）のままテキスト要素はネイティブに選択対象
+- iOS Safari は加えて `-webkit-touch-callout: default` で長押し時のコールアウト UI を出す
+- 親に `role="button"` を付けても、内部の `<span>` テキストは選択対象のまま
+
+### 対処
+- 長押しジェスチャを当てる「表示専用テキスト領域」では併用する：
+  - `select-none`（Tailwind / `user-select: none`）
+  - `style={{ WebkitTouchCallout: "none" }}`（Tailwind に対応 utility なし、inline で指定）
+- 編集対象テキスト（料理行・メモ等、タップでフロート編集が起動するもの）には **適用しない**（カーソル挙動の互換性のため）
+
+### 該当箇所
+- `DayRow` 日付ラベル領域（`src/components/DayRow.tsx`、F012 日付ごとスワップ）
+
+---
+
 ## 共通原則
 
 1. iOS Safari は仕様準拠が緩い。**docs / spec の通りに動かない経路を常に疑う**

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { BackupBadge } from "./components/BackupBadge";
 import { BackupRestore } from "./components/BackupRestore";
 import { Calendar } from "./components/Calendar";
@@ -18,6 +18,9 @@ const ACTIVE_COUNT_CAP = 20;
 /** アクティブ行の入力に対する件数計算のデバウンス（ms） */
 const ACTIVE_DEBOUNCE_MS = 150;
 
+/** スワップ完了後のフラッシュ演出持続時間（ms）。SPEC「150ms 程度」 */
+const SWAP_FLASH_MS = 150;
+
 export default function App() {
   const api = useAppData();
   const backup = useBackup(api);
@@ -27,6 +30,19 @@ export default function App() {
   const [activeQuery, setActiveQuery] = useState("");
   const [debouncedActiveQuery, setDebouncedActiveQuery] = useState("");
   const [debouncedActiveDate, setDebouncedActiveDate] = useState<DateKey | null>(null);
+  // F012: 日付ごとスワップの「移動元」。null なら移動モード非アクティブ
+  const [swapSource, setSwapSource] = useState<DateKey | null>(null);
+  // F012: スワップ完了直後のフラッシュ対象 2 日。null なら非表示
+  const [swapFlashDates, setSwapFlashDates] = useState<ReadonlySet<DateKey> | null>(null);
+  // F012: 連続スワップで先発 timeout が後発フラッシュを途中で消さないため timer id を保持
+  const swapFlashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // アンマウント時に未発火 timeout をクリーンアップ
+  useEffect(
+    () => () => {
+      if (swapFlashTimerRef.current) clearTimeout(swapFlashTimerRef.current);
+    },
+    [],
+  );
   const hits = useSearch(api.data, query);
 
   // 編集対象（line のみ）の現状 text を取得し、FloatingEditor に渡す
@@ -106,11 +122,14 @@ export default function App() {
 
   // 行タップ → その行を編集モードへ
   const handleRequestEditLine = useCallback((dateKey: DateKey, lineIndex: number) => {
+    // F012: 任意のフロート編集起動はスワップ移動モードを解除する
+    setSwapSource(null);
     setEditingTarget({ kind: "line", dateKey, lineIndex });
   }, []);
 
   // メモタップ → メモを編集モードへ
   const handleRequestEditMemo = useCallback((dateKey: DateKey) => {
+    setSwapSource(null);
     setEditingTarget({ kind: "memo", dateKey });
   }, []);
 
@@ -121,10 +140,76 @@ export default function App() {
       api.addLineAt(dateKey, "end");
       // append 後の新規行 index は `before`（addLineAt は同期的に setState を発火するため
       // 次フレームには反映済み。即時 EditingTarget をセットしてフロートを開く）
+      setSwapSource(null);
       setEditingTarget({ kind: "line", dateKey, lineIndex: before });
     },
     [api],
   );
+
+  // F013 行間挿入：対象行の上／下に空行を挿入し、即その空行をフロート編集する
+  const handleRequestInsertLine = useCallback(
+    (dateKey: DateKey, lineIndex: number, where: "above" | "below") => {
+      const insertedIndex = api.insertLineAt(dateKey, lineIndex, where);
+      if (insertedIndex < 0) return;
+      // 挿入されたら必ず移動モードは解除する（spec「他のジェスチャでフロート編集起動 → 解除」）
+      setSwapSource(null);
+      setEditingTarget({ kind: "line", dateKey, lineIndex: insertedIndex });
+    },
+    [api],
+  );
+
+  // F012 日付ラベル長押し：移動モード進入／同じ日なら解除
+  const handleLongPressDate = useCallback((dateKey: DateKey) => {
+    setSwapSource((prev) => (prev === dateKey ? null : dateKey));
+  }, []);
+
+  // F012 日付ラベルタップ：移動モード中の目的日タップ → スワップ実行
+  const handleTapDate = useCallback(
+    (dateKey: DateKey) => {
+      // updater 内で副作用を起こすと StrictMode 二重実行で誤発火するので、
+      // ソース読み出しは pure に行い、副作用は updater 外で実施する
+      if (swapSource === null) return;
+      if (swapSource === dateKey) {
+        setSwapSource(null);
+        return;
+      }
+      const source = swapSource;
+      // 別日タップ → スワップ実行
+      const dayA = api.data.meals[source];
+      const dayB = api.data.meals[dateKey];
+      const bothEmpty =
+        (!dayA || (dayA.lines.every((l) => l.text === "") && !dayA.memo)) &&
+        (!dayB || (dayB.lines.every((l) => l.text === "") && !dayB.memo));
+      api.swapDays(source, dateKey);
+      setSwapSource(null);
+      // SPEC: 両方空ならフラッシュも発火しない
+      if (!bothEmpty) {
+        // 前回のクリア timeout を破棄してから新規にセット（連続スワップで途中消えるのを防ぐ）
+        if (swapFlashTimerRef.current) clearTimeout(swapFlashTimerRef.current);
+        setSwapFlashDates(new Set([source, dateKey]));
+        swapFlashTimerRef.current = window.setTimeout(() => {
+          setSwapFlashDates(null);
+          swapFlashTimerRef.current = null;
+        }, SWAP_FLASH_MS);
+      }
+    },
+    [api, swapSource],
+  );
+
+  // F012 解除経路：Escape キー
+  useEffect(() => {
+    if (swapSource === null) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setSwapSource(null);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [swapSource]);
+
+  // F012 解除経路：料理行 wobble 進入時
+  const handleLineWobbleEnter = useCallback(() => {
+    setSwapSource(null);
+  }, []);
 
   return (
     <div className="flex flex-col h-full max-w-xl mx-auto">
@@ -153,9 +238,15 @@ export default function App() {
           api={api}
           scrollTarget={scrollTarget}
           editingTarget={editingTarget}
+          swapSource={swapSource}
+          swapFlashDates={swapFlashDates}
           onRequestEditLine={handleRequestEditLine}
           onRequestEditMemo={handleRequestEditMemo}
           onRequestAddLine={handleRequestAddLine}
+          onRequestInsertLine={handleRequestInsertLine}
+          onLongPressDate={handleLongPressDate}
+          onTapDate={handleTapDate}
+          onLineWobbleEnter={handleLineWobbleEnter}
         />
         <StockList
           api={api}

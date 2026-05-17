@@ -1,5 +1,67 @@
 # 変更履歴
 
+## 2026-05-17 (LC=1 F012/F013 L1 実装サイクル)
+
+### 追加
+- `useAppData` に F012 `swapDays(dateA, dateB)` API を実装
+  - lines + memo + done + cart を双方向入れ替え（参照共有を避けるため複製）
+  - 両週を再評価し、新規達成週があれば `completedWeeks` に union（F009「献血カウント」セマンティクス維持）
+  - 移動元 A の週を優先して `justCompletedSunday` をセット（spec「2 週同時新規達成時は片方のみ発火」）
+  - 同日 / 両方完全空 / 未指定日 → no-op
+- `useAppData` に F013 `insertLineAt(date, lineIndex, "above" | "below"): number` API を実装
+  - 指定位置に空行を 1 つ挿入し、挿入された行の最終 index を返却（呼び出し側が即フロート編集に渡す）
+  - 範囲外は内部でクランプ（仕様上は対象行に対して呼ぶ前提）
+- `DayRow` 日付ラベル領域に 500ms 長押し検出を追加（`useLongPress` 流用、料理行と同じジェスチャ語彙）
+  - 移動元の視覚強調 `bg-blue-50 + ring-2 ring-blue-300`、フラッシュ `bg-green-50`（150ms）
+  - 長押し後の click を内部フラグで抑止し `onTapDate` 誤発火を防止
+- `DayRow.LineItem` の wobble 中 UI を `[✓][text][↑＋][↓＋][✕]` に置換、🛒/♡ は wobble 中だけ非表示
+- `App.tsx` に `swapSource` / `swapFlashDates` state、`handleLongPressDate` / `handleTapDate` / `handleRequestInsertLine` / `handleLineWobbleEnter` ハンドラを実装
+  - Escape キー解除を `useEffect` で配線（`swapSource` 非 null 時のみリスナ登録）
+  - 任意のフロート編集起動（行・メモ・＋追加・行間挿入）で `setSwapSource(null)` を統合
+  - `handleTapDate` は updater 外で副作用を実行（StrictMode 二重実行対策）
+
+### 変更
+- `Calendar` の Props に F012/F013 関連 6 件を追加して DayRow へ中継
+- `tests/StockList.test.tsx` の `makeApi` モックに `insertLineAt` / `swapDays` を追加（型整合）
+- `tests/DayRow.test.tsx` の `baseProps()` を新 props（`isSwapSource` 等 7 件）に拡張
+
+### 廃止
+- なし（F004 削除モードは API・データ構造とも互換、wobble 中 UI のみ差し替え）
+
+### 体制
+- 判定: M1 維持 (S=2, U=0, R=1, N=1)
+- 事後評価: 妥当。M1 で 4 サイクル運用、layer1-independent-reviewer 不要を維持
+- REGIME-LOG.md 参照
+
+### 儀式記録（本サイクルの振り返り儀式）
+- レベル: 2（LC=1、機能改訂を伴う対話 → L1 実装が後段）
+- スキップ: なし
+- 検出件数: 矛盾 0 / 復活要求 0 / 再提案 0
+- 動的格上げ／格下げ: なし
+
+### 計算的センサー結果（5 層検出スタックの第 1 層）
+| 検査 | 結果 |
+|---|---|
+| 型チェック（`tsc --noEmit`） | PASS |
+| Lint（`biome check`） | PASS |
+| Format チェック | PASS |
+| テスト（`vitest run`） | PASS（227 件 / 0 失敗。F012/F013 追加分 28 件含む） |
+| ビルド（`vite build`） | PASS（1.86s、PWA 生成 OK） |
+
+### 推論的センサー結果（第 4 層：仕様照合）
+- F012 全条件と実装の照合：起動・終了 ✓ / 視覚強調 ✓ / スワップ対象 ✓ / 週達成 union ✓ / 空日関係 ✓ / 過去未来許可 ✓ / 同時実行制約 ✓ / 非対応条件未実装 ✓
+- F013 全条件と実装の照合：起動 ✓ / wobble 中 UI 置換 ✓ / `↑＋`/`↓＋` 挙動 ✓ / 空行への長押し無効 ✓ / 並び替え未実装維持 ✓
+
+### 哲学整合性チェック
+- F012 実装: 早い ✓（2 タップ完結）/ 簡単 ✓（既存長押しと同型）/ 便利 ✓（計画変更の標準操作）
+- F013 実装: 早い ✓（常設ボタン増なし）/ 簡単 ✓（既存 wobble に統合）/ 便利 ✓（任意位置挿入）
+
+### 次サイクル候補
+- 実機（iPhone 11 / iOS Safari）で F012 移動モードと F013 wobble メニューの操作感を検証
+- 必要に応じてフラッシュ演出の Tailwind カスタムアニメ化（現状は `bg-green-50` を 150ms 維持する単純切替）
+
+---
+
 ## 2026-05-17 (LC=1 哲学確立・日付スワップ・行間挿入サイクル) [L0 のみ・実装は次サイクル]
 
 ### 追加

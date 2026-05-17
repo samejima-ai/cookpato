@@ -47,13 +47,20 @@ function baseProps() {
     favoriteKeys: new Set<string>(),
     editingLineIndex: null as number | null,
     isMemoEditing: false,
+    isSwapSource: false,
+    isSwapTarget: false,
+    isSwapFlash: false,
     onToggleLine: () => {},
     onToggleFavorite: () => {},
     onToggleCart: () => {},
     onDeleteLine: () => {},
+    onInsertLineAt: (_i: number, _w: "above" | "below") => {},
     onAddLine: () => {},
     onRequestEditLine: () => {},
     onRequestEditMemo: () => {},
+    onLineWobbleEnter: () => {},
+    onLongPressDate: () => {},
+    onTapDate: () => {},
   };
 }
 
@@ -421,6 +428,145 @@ describe("DayRow", () => {
       const toggle = screen.getByRole("button", { name: /完了にする/ });
       const checkbox = toggle.querySelector("span");
       expect(checkbox?.className).toMatch(/bg-white/);
+    });
+  });
+
+  describe("F013 行間挿入（wobble 中の ↑＋／↓＋ ボタン）", () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("wobble 中は ↑＋ / ↓＋ / ✕ が表示され、🛒 / ♡ は非表示になる", () => {
+      render(<DayRow {...baseProps()} day={makeDay([{ text: "豚バラ大根" }])} />);
+      // 通常時：🛒 / ♡ は表示、↑＋ / ↓＋ / ✕ は非表示
+      expect(screen.queryByRole("button", { name: /買い物マーク/ })).toBeTruthy();
+      expect(screen.queryByRole("button", { name: /お気に入り/ })).toBeTruthy();
+      expect(screen.queryByRole("button", { name: /の上に行を追加/ })).toBeNull();
+      expect(screen.queryByRole("button", { name: /の下に行を追加/ })).toBeNull();
+      expect(screen.queryByRole("button", { name: /を削除/ })).toBeNull();
+
+      longPressDish("豚バラ大根");
+
+      // wobble 中：↑＋ / ↓＋ / ✕ 表示、🛒 / ♡ は非表示
+      expect(screen.queryByRole("button", { name: /買い物マーク/ })).toBeNull();
+      expect(screen.queryByRole("button", { name: /お気に入り/ })).toBeNull();
+      expect(screen.getByRole("button", { name: /豚バラ大根 の上に行を追加/ })).toBeTruthy();
+      expect(screen.getByRole("button", { name: /豚バラ大根 の下に行を追加/ })).toBeTruthy();
+      expect(screen.getByRole("button", { name: /豚バラ大根 を削除/ })).toBeTruthy();
+    });
+
+    it("↑＋ クリックで onInsertLineAt(idx, 'above') が呼ばれる", () => {
+      const onInsertLineAt = vi.fn();
+      render(
+        <DayRow
+          {...baseProps()}
+          day={makeDay([{ text: "カレー" }, { text: "サラダ" }])}
+          onInsertLineAt={onInsertLineAt}
+        />,
+      );
+      longPressDish("サラダ");
+      fireEvent.click(screen.getByRole("button", { name: /サラダ の上に行を追加/ }));
+      expect(onInsertLineAt).toHaveBeenCalledWith(1, "above");
+    });
+
+    it("↓＋ クリックで onInsertLineAt(idx, 'below') が呼ばれる", () => {
+      const onInsertLineAt = vi.fn();
+      render(
+        <DayRow
+          {...baseProps()}
+          day={makeDay([{ text: "カレー" }, { text: "サラダ" }])}
+          onInsertLineAt={onInsertLineAt}
+        />,
+      );
+      longPressDish("カレー");
+      fireEvent.click(screen.getByRole("button", { name: /カレー の下に行を追加/ }));
+      expect(onInsertLineAt).toHaveBeenCalledWith(0, "below");
+    });
+
+    it("空行★（EmptyLineItem）には wobble 進入用の長押し領域がない", () => {
+      // 空行は <button aria-label="未入力の行（タップで入力）">。
+      // 通常 LineItem の長押し領域とは別構造で、長押しジェスチャは設定されていない。
+      const { container } = render(<DayRow {...baseProps()} inCheerWindow day={emptyLines(2)} />);
+      // 空行を長押ししようとしても、wobble は発生しない（↑＋ ボタンが現れない）
+      const stars = container.querySelectorAll(
+        "li button[aria-label='未入力の行（タップで入力）']",
+      );
+      expect(stars.length).toBe(2);
+      const target = stars[0] as HTMLElement;
+      fireEvent.mouseDown(target);
+      act(() => {
+        vi.advanceTimersByTime(500);
+      });
+      fireEvent.mouseUp(target);
+      // wobble モードに入らないため、↑＋/↓＋/✕ は描画されない
+      expect(screen.queryByRole("button", { name: /の上に行を追加/ })).toBeNull();
+    });
+  });
+
+  describe("F012 日付ごとスワップ（日付ラベル長押し + 視覚強調）", () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("日付ラベルを 500ms 長押しで onLongPressDate が呼ばれる", () => {
+      const onLongPressDate = vi.fn();
+      render(<DayRow {...baseProps()} onLongPressDate={onLongPressDate} />);
+      const dateLabel = screen.getByLabelText(/長押しで日付ごと入れ替え/);
+      fireEvent.mouseDown(dateLabel);
+      act(() => {
+        vi.advanceTimersByTime(500);
+      });
+      fireEvent.mouseUp(dateLabel);
+      expect(onLongPressDate).toHaveBeenCalled();
+    });
+
+    it("isSwapSource=true なら日付ラベル領域に bg-blue-50 + ring-2 ring-blue-300 が付く", () => {
+      render(<DayRow {...baseProps()} isSwapSource />);
+      const dateLabel = screen.getByLabelText(/長押しで日付ごと入れ替え/);
+      expect(dateLabel.className).toMatch(/bg-blue-50/);
+      expect(dateLabel.className).toMatch(/ring-2/);
+      expect(dateLabel.className).toMatch(/ring-blue-300/);
+    });
+
+    it("移動モード中の他日（isSwapTarget=true）の日付ラベルタップで onTapDate が呼ばれる", () => {
+      const onTapDate = vi.fn();
+      render(<DayRow {...baseProps()} isSwapTarget onTapDate={onTapDate} />);
+      const dateLabel = screen.getByLabelText(/長押しで日付ごと入れ替え/);
+      fireEvent.click(dateLabel);
+      expect(onTapDate).toHaveBeenCalled();
+    });
+
+    it("移動モード非アクティブ時（isSwapSource=isSwapTarget=false）の日付ラベルタップでは onTapDate は呼ばれない", () => {
+      const onTapDate = vi.fn();
+      render(<DayRow {...baseProps()} onTapDate={onTapDate} />);
+      const dateLabel = screen.getByLabelText(/長押しで日付ごと入れ替え/);
+      fireEvent.click(dateLabel);
+      expect(onTapDate).not.toHaveBeenCalled();
+    });
+
+    it("料理行 wobble 進入時に onLineWobbleEnter が呼ばれる（スワップ移動モード解除トリガー）", () => {
+      const onLineWobbleEnter = vi.fn();
+      render(
+        <DayRow
+          {...baseProps()}
+          day={makeDay([{ text: "豚バラ大根" }])}
+          onLineWobbleEnter={onLineWobbleEnter}
+        />,
+      );
+      longPressDish("豚バラ大根");
+      expect(onLineWobbleEnter).toHaveBeenCalled();
+    });
+
+    it("isSwapFlash=true なら日付ラベル領域に bg-green-50 が付く", () => {
+      render(<DayRow {...baseProps()} isSwapFlash />);
+      const dateLabel = screen.getByLabelText(/長押しで日付ごと入れ替え/);
+      expect(dateLabel.className).toMatch(/bg-green-50/);
     });
   });
 });
