@@ -1204,6 +1204,26 @@ describe("useAppData", () => {
       expect(result.current.data.meals["2030-01-02"]?.lines.map((l) => l.text)).toEqual(["カレー"]);
     });
 
+    it("「text='' && done=true」な空完了行のみの日は非空扱いされ、スワップ対象になる（回帰）", () => {
+      // 手動 toggleLine 経由で「テキストは空だが done=true」な行のみを残した日のケース。
+      // isCompletelyEmptyDay は `text === "" && !done` を空とみなすため、本ケースは非空扱い。
+      // 「全行 text='' + memo なし」ケース（直上）と挙動が分岐することを固定する。
+      const { result } = renderHook(() => useAppData());
+      act(() => {
+        result.current.bulkAddEmptyLines(["2030-01-02"], 1);
+        result.current.toggleLine("2030-01-02", 0);
+        result.current.setMealsText("2030-01-01", "カレー");
+      });
+      // 2030-01-02 は { text: "", done: true } 1 行（isCompletelyEmptyDay は false）
+      expect(result.current.data.meals["2030-01-02"]?.lines).toEqual([{ text: "", done: true }]);
+      act(() => {
+        result.current.swapDays("2030-01-01", "2030-01-02");
+      });
+      // 双方向スワップが行われる：2030-01-01 が空完了行を受け取り、2030-01-02 が「カレー」を受け取る
+      expect(result.current.data.meals["2030-01-01"]?.lines).toEqual([{ text: "", done: true }]);
+      expect(result.current.data.meals["2030-01-02"]?.lines.map((l) => l.text)).toEqual(["カレー"]);
+    });
+
     it("両方空日ならノーオペ（state 識別子が変わらない）", () => {
       const { result } = renderHook(() => useAppData());
       // 2030-01-01 / 2030-01-02 とも未定義

@@ -44,6 +44,44 @@
 
 ---
 
+## 第6回 (2026-05-17) — バックアップ機構クリップボード化 L0 改修サイクル
+
+- **判定**: M1 維持 (S=2, U=0, R=1, N=1) — 合計 3 点、M1 範囲上限
+- **LC**: LC=1（拡張）
+- **AI能力**: Claude Opus 4.7
+- **権限レベル**: L0-3（前回継続）
+- **ARC**: monolith（変更なし）
+- **推奨モデル**: Opus 4.7 単一運用（M1 過剰品質帯、コスト面のみ影響でユーザー許容、前サイクル継続）
+- **実績**: 妥当
+  - F007 改訂のみで機能数の純増なし、Council 諮問で実装方針確定済みのため複雑度寄与は限定的
+  - 廃止対象（シマエナガバッジ催促 / `<a download>` / `lastExport`）は明示削除のため schema-evolution 上の破壊的影響もコード変更で完結
+- **根拠**:
+  - L2 発動閾値 6 項目すべて引き続き大幅余裕
+  - 新規追加サブフェーズなし（DB/API/権限/時間遷移すべて非該当）
+  - Council 諮問（#33 で記録済み、judgment_confidence 0.85 unanimous）で実装案単一に収束
+- **儀式レベル**: 2（機能改訂を伴う対話）
+- **儀式記録**:
+  - F1（過去文脈サマリ提示）: 完了（F007 の改訂歴 / 前提条件の変化 / Council 判定を確認）
+  - F2（認識ズレ検出）: 矛盾 0 / 復活要求 0 / 再提案 0
+    - 細部 2 問（復元 UI の経路維持 / 旧キーの扱い）で user 確認 → 両方推奨案で確定
+  - F3（履歴更新予告）: SPEC.md 改訂 / DONT.md 文言更新 / INTENT.md F007 改訂 / INDEX.md 文言更新 / CHANGELOG 追記 / REGIME-LOG 追記 → 通知のみ、デフォルト承認
+- **儀式拒否**: なし
+- **動的格上げ／格下げ**: なし
+- **廃止判断プロトコル発動**:
+  - 対象: シマエナガバッジ催促 UI / `<a download>` 経路 / `lastExport` キー
+  - 合議＋AI根拠提示: Council #33（business Council、unanimous、judgment_confidence 0.85）で要件成立
+  - 廃止根拠を INTENT.md F007「取り消し線」セクションに記録
+  - **本サイクルでの実体**: SPEC レベルでの deprecation 確定のみ。実装コード（`useBackup` / `BackupBadge` / `loadLastExport`/`saveLastExport` / `triggerDownload` / `getBackupFilename` / `shouldShowExportBanner`）の物理削除と `localStorage.removeItem('cookpato:lastExport:v1')` の実行は次サイクル L1 で行う
+- **哲学による判定**:
+  - F007 改訂版: 早い ○（タップ 1 回完結、OS ダイアログなし）/ 簡単 ○（催促 UI なし、妻に何も求めない）/ 便利 ○（保険経路を維持）
+  - 採択案 (Option D) は 3 語すべてに寄与、却下 3 案 (A/B/C) はそれぞれ 1 語以上を毀損
+- **次回示唆**:
+  - L1 実装サイクル: `useBackup` クリップボード化 + `BackupBadge` 削除 + ストック内ボタン追加 + トースト UI（CHANGELOG「次サイクル申し送り」参照）
+  - F007 周辺コード（`src/lib/backup.ts` / `src/hooks/useBackup.ts` / `src/components/BackupBadge.tsx`）の純減が見込まれ、L1 サイクルでコード行数が減る可能性が高い
+  - 実機（iPhone 11 / iOS Safari）で `navigator.clipboard.writeText` の動作確認、特に **Keep メモ（LINE 内の自分専用チャット）**やメモアプリへの貼り付け運用が妻に定着するかを観察（旧 LINE Keep サービスは終了済のため対象から外す）
+
+---
+
 ## 第5回 (2026-05-17) — F012/F013 L1 実装サイクル
 
 - **判定**: M1 維持 (S=2, U=0, R=1, N=1) — 合計 3 点、M1 範囲上限
