@@ -1,65 +1,40 @@
 /**
- * バックアップ（月 1 ファイル書き出し + インポート復元）の状態管理 hook。
+ * バックアップ（クリップボードコピー + テキスト復元）の薄いフック。
  *
- * - 起動時に lastExport を localStorage から読み、30 日経過で showBanner=true
- * - showBanner はシマエナガバッジ（BackupBadge）の出現条件に使う。
- *   バッジには明示の閉じる操作はなく、書き出し完了で 30 日経過判定が落ちて出なくなる
- * - exportFile: ファイル書き出しを同期発火するだけ。lastExport は更新しない
- *   （バッジの離脱アニメーション完了タイミングで markExported を呼ぶ運用）
- * - markExported: 書き出し成功とみなして lastExport を更新する
- * - importFromText: JSON テキストを検証して AppData として上書き復元
+ * 2026-05-17 F007 改訂（SPEC §「バックアップ（クリップボード方式）」）:
+ * - エクスポート: `navigator.clipboard.writeText` でクリップボードに JSON をコピー
+ * - 復元: JSON テキスト（ファイル経路 / 貼り付け経路の両方）を AppData として検証 → 上書き
+ * 旧仕様の `lastExport` / `showBanner` / `markExported` / `exportFile` は撤去済。
  */
-import { useCallback, useMemo, useState } from "react";
-import {
-  getBackupFilename,
-  parseBackup,
-  serializeBackup,
-  shouldShowExportBanner,
-  triggerDownload,
-} from "../lib/backup";
-import { todayKey } from "../lib/date";
-import { loadLastExport, saveLastExport } from "../lib/storage";
-import type { AppData, DateKey } from "../types";
+import { useCallback, useMemo } from "react";
+import { parseBackup, serializeBackup } from "../lib/backup";
+import type { AppData } from "../types";
 import type { AppDataApi } from "./useAppData";
 
 export type ImportResult = { ok: true } | { ok: false; reason: string };
+export type CopyResult = "ok" | "fail";
 
 export type UseBackupApi = {
-  /** バックアップ催促バッジを表示すべきか（最終書き出しから 30 日経過） */
-  showBanner: boolean;
-  /** 最終ファイル書き出し日（DateKey、未経験は null） */
-  lastExport: DateKey | null;
   /**
-   * ファイル書き出しを同期発火する（OS ダイアログまで誘導）。
-   * lastExport は更新しない。badge 離脱演出後に markExported で記録する想定
+   * 現 AppData を JSON 直列化してクリップボードへ書き込む。
+   * user gesture 起源（ボタンタップ）であれば iOS Safari の permission prompt は発生しない。
+   * 失敗時（権限拒否・古い iOS 等）は "fail" を返し、フォールバックは設けない（妻に負担をかけない）。
    */
-  exportFile: () => void;
-  /**
-   * 書き出し成功として lastExport を today に更新する。
-   * badge 離脱アニメーション完了時に呼ばれる
-   */
-  markExported: () => void;
+  copyToClipboard: () => Promise<CopyResult>;
   /** インポート復元：AppData として検証 → 成功時に api.restoreData を呼ぶ */
   importFromText: (text: string) => ImportResult;
 };
 
 export function useBackup(api: AppDataApi): UseBackupApi {
-  const [lastExport, setLastExport] = useState<DateKey | null>(() => loadLastExport());
-
-  const showBanner = useMemo(() => shouldShowExportBanner(lastExport, todayKey()), [lastExport]);
-
-  const exportFile = useCallback(() => {
-    const now = new Date();
-    const filename = getBackupFilename(now);
-    const content = serializeBackup(api.data);
-    triggerDownload(filename, content);
+  const copyToClipboard = useCallback(async (): Promise<CopyResult> => {
+    try {
+      const text = serializeBackup(api.data);
+      await navigator.clipboard.writeText(text);
+      return "ok";
+    } catch {
+      return "fail";
+    }
   }, [api.data]);
-
-  const markExported = useCallback(() => {
-    const today = todayKey();
-    saveLastExport(today);
-    setLastExport(today);
-  }, []);
 
   const importFromText = useCallback(
     (text: string): ImportResult => {
@@ -73,11 +48,5 @@ export function useBackup(api: AppDataApi): UseBackupApi {
     [api],
   );
 
-  return {
-    showBanner,
-    lastExport,
-    exportFile,
-    markExported,
-    importFromText,
-  };
+  return useMemo(() => ({ copyToClipboard, importFromText }), [copyToClipboard, importFromText]);
 }

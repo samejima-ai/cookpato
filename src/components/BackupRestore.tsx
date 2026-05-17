@@ -1,10 +1,16 @@
 /**
- * バックアップ復元 UI（インポート）。
- * - ボタンタップで `<input type="file">` を起動
- * - ファイル選択 → JSON パース → 確認ダイアログ → 復元実行
- * - 検証失敗時はインラインのエラーメッセージを表示
+ * バックアップ復元 UI（2 経路）。
  *
- * 「現在のデータを上書きします」を必ずダイアログで明示し、誤タップでの全消し事故を防ぐ。
+ * 2026-05-17 F007 改訂：
+ * - 経路 1: ファイル復元（旧仕様の互換維持）→ `<input type="file">` 経由
+ *   ボタン文言は SPEC §「経路 1」定義に合わせ「ファイルから復元」に改名
+ * - 経路 2: クリップボード貼り付け復元（新規）→ textarea にユーザーが貼り付け
+ *   `navigator.clipboard.readText()` は iOS の「貼り付けますか?」プロンプトが
+ *   出るため使わず、textarea 経由の iOS 標準操作に統一する
+ *
+ * 両経路とも共通の挙動：textarea / file 内容を `pendingText` に保持 → 確認ダイアログ
+ *「現在のデータを上書きします。続行しますか？」→ 確定タップで初めて `importFromText` を呼ぶ。
+ * 検証失敗時は現データを変更せずインラインエラーを表示する。
  */
 import { useEffect, useRef, useState } from "react";
 import type { ImportResult } from "../hooks/useBackup";
@@ -14,10 +20,12 @@ type Props = {
 };
 
 export function BackupRestore({ importFromText }: Props) {
-  const inputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [pendingText, setPendingText] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [pasteOpen, setPasteOpen] = useState(false);
+  const [pasteText, setPasteText] = useState("");
 
   // 成功メッセージは 3 秒で自動消滅（再復元時に古い表示が残らないように）
   useEffect(() => {
@@ -28,7 +36,7 @@ export function BackupRestore({ importFromText }: Props) {
 
   function openFileDialog() {
     setError(null);
-    inputRef.current?.click();
+    fileInputRef.current?.click();
   }
 
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -46,6 +54,25 @@ export function BackupRestore({ importFromText }: Props) {
       });
   }
 
+  function openPaste() {
+    setError(null);
+    setPasteOpen(true);
+  }
+
+  function cancelPaste() {
+    setPasteOpen(false);
+    setPasteText("");
+  }
+
+  function submitPaste() {
+    // SPEC: textarea の内容を pendingText に保持 → 確認ダイアログ経由で初めて importFromText を呼ぶ
+    if (pasteText.trim() === "") {
+      setError("貼り付けてください");
+      return;
+    }
+    setPendingText(pasteText);
+  }
+
   function confirmRestore() {
     if (pendingText === null) return;
     const result = importFromText(pendingText);
@@ -53,6 +80,8 @@ export function BackupRestore({ importFromText }: Props) {
     if (result.ok) {
       setError(null);
       setSuccessMsg("バックアップから復元しました");
+      setPasteOpen(false);
+      setPasteText("");
     } else {
       setError(result.reason);
     }
@@ -69,15 +98,49 @@ export function BackupRestore({ importFromText }: Props) {
         onClick={openFileDialog}
         className="text-neutral-500 underline active:text-neutral-800 min-h-11 px-2"
       >
-        バックアップから復元
+        ファイルから復元
       </button>
       <input
-        ref={inputRef}
+        ref={fileInputRef}
         type="file"
         accept="application/json,.json"
         onChange={handleFile}
         className="hidden"
       />
+      <button
+        type="button"
+        onClick={openPaste}
+        className="text-neutral-500 underline active:text-neutral-800 min-h-11 px-2"
+      >
+        クリップボードから復元
+      </button>
+      {pasteOpen && (
+        <div className="mt-2 flex flex-col gap-2">
+          <textarea
+            value={pasteText}
+            onChange={(e) => setPasteText(e.target.value)}
+            placeholder="ここに貼り付け"
+            className="w-full h-32 border border-neutral-300 rounded p-2 text-sm font-mono"
+            aria-label="バックアップ JSON 貼り付け"
+          />
+          <div className="flex gap-2 justify-end">
+            <button
+              type="button"
+              onClick={cancelPaste}
+              className="px-3 py-1 min-h-11 text-sm text-neutral-600 rounded"
+            >
+              キャンセル
+            </button>
+            <button
+              type="button"
+              onClick={submitPaste}
+              className="px-3 py-1 min-h-11 text-sm text-white bg-neutral-800 rounded active:bg-neutral-900"
+            >
+              復元
+            </button>
+          </div>
+        </div>
+      )}
       {error && (
         <p role="alert" className="mt-1 text-red-600">
           {error}

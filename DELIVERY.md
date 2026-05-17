@@ -257,3 +257,85 @@ L0 サイクル（PR #20、SPEC.md「バックアップ（二層構成）」）�
 - 妥当。SPEC.md「バックアップ（二層構成）」が機能×条件粒度で完全に確定しており、迷う場面はなかった
 - 独立検証 agent の不在による品質劣化はなし（自己検証＋計算センサーで十分捕捉）
 - L2 発動閾値には遠い（変更ファイル数 9、新規行 +750 程度）。次回サイクルも M1 で問題ない見込み
+
+---
+
+### 2026-05-17: F007 バックアップ機構クリップボード化 L1 実装（PR #35 INSTRUCTIONS.md → L1）
+
+L0 改修サイクル（PR #34、SPEC.md「バックアップ（クリップボード方式）」）と
+L1 申し送り（PR #35、INSTRUCTIONS.md）に従い、9 タスクを実装。
+
+#### 変更点
+
+**Task 1: `src/lib/backup.ts` 縮約**
+- 削除：`BACKUP_INTERVAL_DAYS` / `formatISOWeek` / `getBackupFilename` / `triggerDownload` / `shouldShowExportBanner`
+- 維持：`serializeBackup` / `parseBackup`（クリップボード書き込みとテキスト復元の両経路で再利用）
+- `date-fns` の `differenceInCalendarDays` / `getISOWeek` / `getISOWeekYear` import を撤去
+
+**Task 2: `src/lib/storage.ts` 縮約 + 旧キー即時削除**
+- 削除：`LAST_EXPORT_KEY` 定数 / `loadLastExport` / `saveLastExport`
+- 追加：`loadData()` 初回呼び出し時に `localStorage.removeItem('cookpato:lastExport:v1')` を idempotent 実行
+- SPEC §「データモデル進化」expand-contract プロトコル例外条項に従い、AppData プライマリキーには触らない
+
+**Task 3: `src/hooks/useBackup.ts` 刷新**
+- 削除 API：`showBanner` / `lastExport` / `exportFile` / `markExported`
+- 新 API：`copyToClipboard(): Promise<"ok" | "fail">` — `navigator.clipboard.writeText(serializeBackup(api.data))` を try/catch
+- 維持 API：`importFromText(text): ImportResult`
+- 戻り値は `useMemo` で安定化
+
+**Task 4: `src/components/BackupBadge.tsx` 削除**
+- ファイルごと削除（`src/components/BackupBadge.tsx`）
+- `src/assets/shimaenaga-backup.png` も削除（他参照なし）
+- `src/index.css` の `@keyframes shimaenaga-float` / `.animate-shimaenaga-float` / `.animate-shimaenaga-float-paused` / `prefers-reduced-motion` 配下定義を削除
+- `shimaenaga-cart.png` は DayRow（買い物マーカー）で使用継続のため維持
+
+**Task 5: `src/components/StockList.tsx` に `copySlot` プロップ追加**
+- `restoreSlot` と並列に `copySlot?: React.ReactNode` を追加し、折りたたみ展開時の末尾に描画
+- 既存 UI には変更なし
+
+**Task 6: `src/components/Toast.tsx` 新規追加**
+- 画面下部に 3 秒滞在 → 自動消去
+- `pointer-events: none` で操作阻害なし
+- `motion-safe:animate-toast-fade`（150ms フェードイン）+ `prefers-reduced-motion` 配慮
+- `kind: "info" | "error"` で色分け（info=neutral-800、error=red-600）
+- 新規 CSS keyframe `toast-fade` を `src/index.css` に追加
+
+**Task 7: `src/components/BackupRestore.tsx` 拡張**
+- 経路 1（ファイル復元）：既存ロジックを温存、ボタン文言を「バックアップから復元」→ **「ファイルから復元」** に改名（SPEC §「経路 1」定義に合わせる）
+- 経路 2（クリップボード貼り付け復元）新規追加：「クリップボードから復元」ボタン → 折りたたみ内 textarea + 「復元」/「キャンセル」ボタン
+- 両経路とも：内容を `pendingText` に保持 → `ConfirmRestoreDialog`「現在のデータを上書きします。続行しますか？」→ 確定タップで初めて `importFromText` を呼ぶ（確認前にデータ上書きが起きない順序を明示実装）
+- 検証失敗時は現データを変更せずインラインエラー（`role="alert"`）、成功時は `<output>` で 3 秒成功メッセージ
+
+**Task 8: `src/components/BackupCopyButton.tsx` 新規追加 + `src/App.tsx` 配線整理**
+- `BackupCopyButton`：折りたたみ内に表示する「バックアップをコピー」ボタン。`onCopy` 結果に応じて `onToast` を呼ぶ
+- `App.tsx`：`BackupBadge` import と `showBanner` 分岐を削除、`toast` state + `showToast` / `dismissToast` を追加、`StockList.copySlot` に `BackupCopyButton` を注入、画面下部に `Toast` を配置
+
+**Task 9: テスト更新**
+- `tests/backup.test.ts`：旧 API 系（`formatISOWeek` / `getBackupFilename` / `shouldShowExportBanner`）テストを削除、`serializeBackup` / `parseBackup` テストは維持
+- `tests/storage.test.ts`：`loadLastExport` / `saveLastExport` テストを削除、新規 3 ケース追加（旧キー削除 / 旧キー不在時の冪等 / AppData プライマリキーへの非影響）
+- `tests/useBackup.test.tsx` 新規追加：`copyToClipboard` の成功・失敗 2 ケース（必須、`navigator.clipboard.writeText` を `Object.defineProperty` で差し替え）+ `importFromText` の 3 ケース（成功 / 不正 JSON / 実質空）
+
+#### センサー結果（全 5 項目 pass）
+| コマンド | 結果 |
+|---|---|
+| `npm run typecheck` | ✅ |
+| `npm run lint` | ✅ |
+| `npm run format:check` | ✅ |
+| `npm test` | ✅ 228/228（前回 229 → backup 旧テスト 5 件削除、storage 旧テスト 2 件削除、storage 新 3 件 + useBackup 新 5 件 = -7 +8 - 1 旧 serializeBackup 統合差分）|
+| `npm run build` | ✅（dist 375.18 kB JS / gzip 88.49 kB、BackupBadge 削除分のバンドル減と Toast/BackupCopyButton 追加分のバンドル増で実質中立、`differenceInCalendarDays` 等の date-fns サブモジュールが落ちた）|
+
+#### 既知未検証事項
+- **実機 iPhone 11 Safari スタンドアロン PWA モードでの `navigator.clipboard.writeText` 挙動**：user gesture 起源（ボタンタップ）で permission prompt なしで動作するはずだが、iOS 版数による差異あり。失敗時のトースト分岐発火を実機確認推奨
+- **textarea への iOS 標準「貼り付け」ジェスチャ**：長押し → 貼り付けメニューが普通に出ることを実機確認推奨
+- **トーストの 3 秒滞在 + `pointer-events: none`**：スクロール / タップを阻害しないことを実機確認推奨
+- jsdom テストでは `navigator.clipboard` を `Object.defineProperty` で差し替えてシミュレートしているため、ブラウザ実機の Permissions API 経路は別途確認が必要
+
+#### 哲学整合（INDEX.md / CLAUDE.md「早い・簡単・便利」）
+- **早い** ✓ — タップ 1 回でコピー完了、OS ダイアログを挟まない
+- **簡単** ✓ — シマエナガバッジ催促が消滅、妻に何も求めない設計
+- **便利** ✓ — JSON 形式での外部保管経路を維持、ファイル復元との対称運用も成立
+
+#### 体制事後評価（M1 単体モード）
+- 妥当。INSTRUCTIONS.md（PR #35）が機能×タスク粒度で完全に確定しており、迷う場面はなかった
+- 独立検証 agent の不在による品質劣化はなし（自己検証＋計算センサーで十分捕捉、Copilot レビューも L0 段階で 5 件取り込み済）
+- L2 発動閾値には遠い（変更ファイル数 9、新規行 +400 程度、削除 +200 程度）。次回サイクルも M1 で問題ない見込み

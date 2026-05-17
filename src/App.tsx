@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { BackupBadge } from "./components/BackupBadge";
+import { BackupCopyButton } from "./components/BackupCopyButton";
 import { BackupRestore } from "./components/BackupRestore";
 import { Calendar } from "./components/Calendar";
 import { FloatingEditor } from "./components/FloatingEditor";
 import { SearchBar } from "./components/SearchBar";
 import { SearchResults } from "./components/SearchResults";
 import { StockList } from "./components/StockList";
+import { Toast, type ToastKind } from "./components/Toast";
 import { useAppData } from "./hooks/useAppData";
 import { useBackup } from "./hooks/useBackup";
 import { useSearch } from "./hooks/useSearch";
@@ -24,6 +25,11 @@ const SWAP_FLASH_MS = 150;
 export default function App() {
   const api = useAppData();
   const backup = useBackup(api);
+  const [toast, setToast] = useState<{ message: string; kind: ToastKind } | null>(null);
+  const showToast = useCallback((message: string, kind: ToastKind) => {
+    setToast({ message, kind });
+  }, []);
+  const dismissToast = useCallback(() => setToast(null), []);
   const [query, setQuery] = useState("");
   const [scrollTarget, setScrollTarget] = useState<DateKey | undefined>(undefined);
   const [editingTarget, setEditingTarget] = useState<EditingTarget | null>(null);
@@ -213,9 +219,6 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-full max-w-xl mx-auto">
-      {backup.showBanner && (
-        <BackupBadge onSave={backup.exportFile} onComplete={backup.markExported} />
-      )}
       <header className="relative shrink-0 safe-top">
         <SearchBar
           value={query}
@@ -250,9 +253,11 @@ export default function App() {
         />
         <StockList
           api={api}
+          copySlot={<BackupCopyButton onCopy={backup.copyToClipboard} onToast={showToast} />}
           restoreSlot={<BackupRestore importFromText={backup.importFromText} />}
         />
       </main>
+      {toast && <Toast message={toast.message} kind={toast.kind} onDismiss={dismissToast} />}
     </div>
   );
 }

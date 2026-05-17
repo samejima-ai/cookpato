@@ -1,5 +1,63 @@
 # 変更履歴
 
+## 2026-05-17 (LC=1 F007 クリップボードバックアップ L1 実装サイクル)
+
+### 追加
+- `src/hooks/useBackup.ts` を全面刷新。`copyToClipboard()` / `importFromText()` の 2 API に集約。`navigator.clipboard.writeText` で JSON を書き込み、失敗時は `"fail"` を返してフォールバックなし（妻に負担をかけない設計）
+- `src/components/Toast.tsx` を新規追加。画面下部 3 秒滞在、`pointer-events: none` で操作阻害なし、`motion-safe:animate-toast-fade` 150ms フェードイン、`prefers-reduced-motion` 配慮
+- `src/components/BackupCopyButton.tsx` を新規追加。`onCopy` 結果に応じて成功 / 失敗トーストを発火
+- `src/components/StockList.tsx` に `copySlot?: React.ReactNode` プロップを追加（折りたたみ展開時末尾、`restoreSlot` の隣に描画）
+- `src/components/BackupRestore.tsx` に経路 2「クリップボードから復元」を追加。textarea → 「復元」ボタン → 確認ダイアログ → 確定タップで初めて `importFromText` を呼ぶ順序
+- `src/index.css` に `@keyframes toast-fade` / `.animate-toast-fade` を追加
+- `tests/useBackup.test.tsx` を新規追加（`copyToClipboard` 成功 / 失敗の必須 2 ケース + `importFromText` 3 ケース）
+- `tests/storage.test.ts` に旧 `cookpato:lastExport:v1` キー削除の 3 ケースを追加
+
+### 変更
+- `src/lib/storage.ts` の `loadData()` 初回呼び出し時に `localStorage.removeItem('cookpato:lastExport:v1')` を idempotent 実行（expand-contract プロトコル例外条項）
+- `src/components/BackupRestore.tsx` のファイル復元ボタン文言を「バックアップから復元」→ **「ファイルから復元」** に改名（SPEC §「経路 1」定義 + 2 経路の文言区別）
+- `src/App.tsx`：`<BackupBadge>` 描画削除、`toast` state + `showToast` / `dismissToast` ハンドラ追加、`<Toast>` を画面下部に配置、`<StockList copySlot={<BackupCopyButton>}>` を注入
+
+### 廃止（コード撤去完了）
+- `src/components/BackupBadge.tsx` をファイルごと削除（旧 PR #29-#30 の歩行アニメ含む全機能）
+- `src/assets/shimaenaga-backup.png` を削除（他参照なし、`shimaenaga-cart.png` は買い物マーカーで使用継続のため維持）
+- `src/index.css` の `@keyframes shimaenaga-float` / `.animate-shimaenaga-float` / `.animate-shimaenaga-float-paused` 定義および `prefers-reduced-motion` 配下の関連定義を削除
+- `src/lib/backup.ts`：`BACKUP_INTERVAL_DAYS` / `formatISOWeek` / `getBackupFilename` / `triggerDownload` / `shouldShowExportBanner` を削除。`date-fns` の `differenceInCalendarDays` / `getISOWeek` / `getISOWeekYear` import も撤去
+- `src/lib/storage.ts`：`LAST_EXPORT_KEY` 定数 / `loadLastExport` / `saveLastExport` を削除
+- `src/hooks/useBackup.ts`：`showBanner` / `lastExport` / `exportFile` / `markExported` API を削除
+- `tests/backup.test.ts`：`formatISOWeek` / `getBackupFilename` / `shouldShowExportBanner` の describe を削除
+- `tests/storage.test.ts`：`loadLastExport / saveLastExport` の describe を削除
+- ルートの `INSTRUCTIONS.md` をクリーンアップ（PR #19 前例に従う、本サイクル完了の証跡）
+
+### 体制
+- 判定: M1 維持 (S=2, U=0, R=1, N=1)
+- 事後評価: 妥当。INSTRUCTIONS.md が機能×タスク粒度で完全に確定しており、迷う場面はなかった。M1 で 5 サイクル運用継続
+- REGIME-LOG.md 参照
+
+### 儀式記録（本サイクルの振り返り儀式）
+- レベル: 1（LC=1、L1 実装サイクル、SPEC 改変なし）
+- スキップ: なし
+- 検出件数: 矛盾 0 / 復活要求 0 / 再提案 0
+
+### 計算的センサー結果（5 層検出スタックの第 1 層）
+| 検査 | 結果 |
+|---|---|
+| 型チェック（`tsc --noEmit`） | PASS |
+| Lint（`biome check`） | PASS |
+| Format（`biome format`） | PASS |
+| テスト（`vitest run`） | PASS 228/228 |
+| ビルド（`tsc + vite build`） | PASS（dist 375.18 kB JS / gzip 88.49 kB） |
+
+### 哲学整合性チェック
+- F007 改訂 L1 実装: 早い ✓（クリップボードコピー 1 タップ）/ 簡単 ✓（催促 UI 完全撤去、妻に何も求めない）/ 便利 ✓（保管経路維持 + ファイル / 貼り付け 2 経路の対称運用）
+- 採択された Option D（L0 サイクル）の 3 語整合性を実装側でも保持
+
+### 既知未検証事項（次回 L0 レビュー時に妻の端末で確認）
+- 実機 iPhone 11 Safari スタンドアロン PWA モードでの `navigator.clipboard.writeText` 挙動（user gesture 起源の permission prompt 有無、版数差異）
+- textarea への iOS 標準「貼り付け」ジェスチャ実動作
+- トーストの 3 秒滞在 + `pointer-events: none` がスクロール / タップを阻害しないこと
+
+---
+
 ## 2026-05-17 (LC=1 バックアップ機構クリップボード化 L0 改修サイクル)
 
 ### 改訂（F007 バックアップ機構の全面置換）

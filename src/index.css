@@ -106,26 +106,21 @@ input[type="search"] {
   animation: slide-down 200ms ease-out;
 }
 
-/* バックアップ催促バッジ：歩行中の上下「ふわふわ」揺れ（約 1.8s 周期、振幅 4px） */
-@keyframes shimaenaga-float {
-  0%,
-  100% {
+/*
+ * トースト（F007 クリップボードコピー通知）のフェード。
+ * 出現 150ms、滞在中（3 秒）は静止、自動消去のため out 演出は不要。
+ * `motion-safe:` プレフィックスで prefers-reduced-motion 時は適用されない。
+ */
+@keyframes toast-fade {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
     transform: translateY(0);
   }
-  50% {
-    transform: translateY(-4px);
-  }
 }
-.animate-shimaenaga-float {
-  animation: shimaenaga-float 1.8s ease-in-out infinite;
-}
-/* paused 時：揺れを途中フレームで停止（タップ凍結時に使う） */
-.animate-shimaenaga-float-paused {
-  animation-play-state: paused;
-}
-/* prefers-reduced-motion を尊重して常時揺れを無効化（前庭系への配慮） */
-@media (prefers-reduced-motion: reduce) {
-  .animate-shimaenaga-float {
-    animation: none;
-  }
+.animate-toast-fade {
+  animation: toast-fade 150ms ease-out;
 }
