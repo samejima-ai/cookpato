@@ -1,5 +1,53 @@
 # 変更履歴
 
+## 2026-05-17 (LC=1 バックアップ機構クリップボード化 L0 改修サイクル)
+
+### 改訂（F007 バックアップ機構の全面置換）
+- SPEC.md「バックアップ」セクション全面書き換え：
+  - エクスポート: `<a download>` + 週番号付きファイル名 → `navigator.clipboard.writeText` でクリップボードコピー
+  - フィードバック: シマエナガバッジ催促 → コピー成功時のインライントースト「LINE Keep やメモ帳に貼り付けて保管してください」3 秒（哲学者の補強案、Council #33）
+  - 復元 UI: ファイル経路（旧仕様の互換維持）+ クリップボード貼り付け経路（新規、textarea）の 2 経路
+  - データモデル進化: localStorage キー `cookpato:lastExport:v1` を即時削除
+- INDEX.md 機能一覧の文言を「クリップボードコピー + ファイル/貼り付け復元」に更新
+- DONT.md「明示的に行わない通信・同期系」のバックアップ補足を新仕様に更新
+- DONT.md「哲学による却下判断」表に Council #33 で却下された 3 案（Web Share / OPFS / 催促 UI 維持）を追加
+- history/INTENT.md F007 を改訂版に書き換え、廃止要素を取り消し線で記録、却下案を Council 経緯と合わせて追加
+
+### 廃止（本サイクル）
+- シマエナガバッジ催促 UI（旧 PR #29-#30 の歩行アニメ含む全機能）
+- 30 日経過判定（`shouldShowExportBanner` / `lastExport` state）
+- `<a download>` 経由のファイル書き出し（`triggerDownload` / `getBackupFilename` / ISO 週番号生成）
+- localStorage キー `cookpato:lastExport:v1`
+
+### 体制
+- 判定: M1 維持 (S=2, U=0, R=1, N=1)
+- 事後評価: 妥当。F007 改訂は機能数の純増なし（既存改訂のみ）、複雑度寄与は限定的
+- REGIME-LOG.md 参照
+
+### 儀式記録（本サイクルの振り返り儀式）
+- レベル: 2（LC=1、機能改訂を伴う対話）
+- スキップ: なし
+- 検出件数: 矛盾 0 / 復活要求 0 / 再提案 0
+- 動的格上げ／格下げ: なし
+- 廃止判断プロトコル発動: シマエナガバッジ催促・`<a download>` 経路の廃止について Council #33（unanimous、judgment_confidence 0.85）で合議＋AI根拠提示が成立済み
+
+### 哲学整合性チェック
+- F007 改訂版: 早い ✓（タップ 1 回完結）/ 簡単 ✓（催促なし、妻に何も求めない）/ 便利 ✓（保険経路を維持）
+- 採択された案 (Option D) は 3 語すべてに寄与、却下された 3 案はそれぞれ 1 語以上を毀損するため DONT.md 却下表へ記録
+
+### 次サイクル（L1 実装）への申し送り
+- `src/lib/backup.ts`: `triggerDownload` / `getBackupFilename` / `formatISOWeek` / `BACKUP_INTERVAL_DAYS` / `shouldShowExportBanner` を削除、`serializeBackup` / `parseBackup` は維持（テキスト操作で再利用）
+- `src/hooks/useBackup.ts`: ファイル書き出し系を `navigator.clipboard.writeText` に置換。`lastExport` / `showBanner` / `markExported` API を削除し、`copyToClipboard` / `importFromText` の 2 メソッドに整理
+- `src/components/BackupBadge.tsx`: **ファイルごと削除**
+- `src/components/BackupRestore.tsx`: ファイル復元経路を維持しつつ「クリップボードから復元」textarea 経路を追加
+- `src/components/StockList.tsx`: 折りたたみ内に「バックアップをコピー」ボタンを追加（復元 UI の隣）
+- `src/App.tsx`: `<BackupBadge>` の参照と関連 import を削除
+- `src/lib/storage.ts`: `loadLastExport` / `saveLastExport` を削除、`cookpato:lastExport:v1` キーは初回読み出し時に存在すれば即時 `localStorage.removeItem` で消去
+- トースト UI を新規追加（既存の `BackupRestore` のインラインメッセージと UI 統一推奨）
+- テスト: `tests/backup.test.ts` のファイル書き出し系テストを削除、クリップボードコピー / 貼り付け復元 / 旧キー即時削除のテストを追加
+
+---
+
 ## 2026-05-17 (LC=1 F012/F013 L1 実装サイクル)
 
 ### 追加

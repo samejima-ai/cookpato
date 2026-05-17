@@ -22,6 +22,6 @@ Council 発動の都度 1 エントリを追記する。編集禁止。
   - 哲学者 → D + 補強案『貼り付け先ガイダンス』（意味、confidence 0.65）
 - **recommended**: Option D + 哲学者の補強（コピー時のインラインガイダンス 1 行）
 - **judgment_confidence**: 0.85
-- **human_escalated**: false（合意プロセスでユーザーに方針確認、承認待ち）
-- **implementer_consent**: pending（ユーザー承認後に SPEC 改修サイクルで本実装）
-- **次アクション**: L0 SPEC 改修サイクル — バックアップ機構をクリップボード型に変更、シマエナガ催促を廃止、復元 UI 維持、コピー時ガイダンス追加。`history/INTENT.md` の F007 エントリを「2026-05-17 改訂: 媒体外ファイル書き出し → クリップボード方式」へ補正
+- **human_escalated**: false（合意プロセスでユーザー承認、L0 改修サイクルへ移行）
+- **implementer_consent**: granted（2026-05-17 L0 改修サイクル開始時にユーザー明示承認、復元 UI 2 経路維持 + `lastExport` 即時削除を合わせて確定）
+- **次アクション**: ~~L0 SPEC 改修サイクル~~ → **完了**（本ログ更新と同じサイクルで実施、SPEC.md / DONT.md / INTENT.md F007 / INDEX.md / SUMMARY.md / REGIME-LOG.md / CHANGELOG.md を改修）。次は L1 実装サイクル（`useBackup` クリップボード化 + `BackupBadge` 削除 + ストック内ボタン追加 + トースト UI、詳細は CHANGELOG.md 2026-05-17「バックアップ機構クリップボード化 L0 改修サイクル」末尾の申し送り参照）
