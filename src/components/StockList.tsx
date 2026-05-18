@@ -176,13 +176,21 @@ export function StockList({ api, backupTrigger }: Props) {
   // 2) 再レンダ後（useLayoutEffect）に新しい top を取得し差分 dy を算出
   // 3) translateY(dy) で「元の位置」に戻したように見せ、次フレームで 0 へ transition
   // CLAUDE.md「アニメーションは 100-200ms 以内」に従い 150ms。
+  // 位置は **コンテンツ座標系**（scroll 容器の content top 起点）で保存・比較する。
+  // viewport 座標だと容器内スクロール後に ＋/− をタップした際、並び順が変わっていなくても
+  // 「スクロール量分」の dy が全行で偽発火し、translateY が一斉に当たって
+  // 「スクロール位置がリセットされて戻る」ように見える視覚バグが出る（実機 iPhone 11 Safari 報告）。
+  // content 座標なら容器内スクロール量を相殺できるため、本当に行が並び替わったケースだけ animate する。
   // 依存は `api.data.stock`（配列の参照変化＝並び替え・追加・削除のいずれかで再実行）。
   // biome-ignore lint/correctness/useExhaustiveDependencies: stock 変化が再実行の意図的トリガー。中身は ref から読むため body には現れない
   useLayoutEffect(() => {
     const prev = prevRectsRef.current;
     const next = new Map<string, number>();
+    const container = scrollContainerRef.current;
+    const containerTop = container?.getBoundingClientRect().top ?? 0;
+    const scrollTop = container?.scrollTop ?? 0;
     liRefs.current.forEach((li, id) => {
-      const top = li.getBoundingClientRect().top;
+      const top = li.getBoundingClientRect().top - containerTop + scrollTop;
       next.set(id, top);
       const oldTop = prev.get(id);
       if (oldTop === undefined) return;
@@ -306,9 +314,13 @@ export function StockList({ api, backupTrigger }: Props) {
       // 1) prevRectsRef を「現在の表示位置」（= 指追従後＆シフト後の位置）で保存。
       //    これが FLIP の起点となり、ドラッグ行は指の位置から並び替え後位置へスライド、
       //    シフト中だった行は既にシフト後位置 = 並び替え後位置にいるので動かない。
+      //    座標系は useLayoutEffect 側と合わせて **コンテンツ座標系** を使う。
+      const container = scrollContainerRef.current;
+      const containerTop = container?.getBoundingClientRect().top ?? 0;
+      const scrollTop = container?.scrollTop ?? 0;
       const newPrev = new Map<string, number>();
       liRefs.current.forEach((li, id) => {
-        newPrev.set(id, li.getBoundingClientRect().top);
+        newPrev.set(id, li.getBoundingClientRect().top - containerTop + scrollTop);
       });
       prevRectsRef.current = newPrev;
       // 2) transform を即時クリア（FLIP useLayoutEffect が改めて invert 適用するため）
