@@ -1,7 +1,8 @@
-import type { ChangeEvent } from "react";
+import { type ChangeEvent, useRef, useState } from "react";
 import { useComposition } from "../hooks/useComposition";
 
 type Props = {
+  /** 初期値（uncontrolled の defaultValue として利用）。外部から値を流し込む場合は親側で key を更新して再マウントする */
   value: string;
   onChange: (v: string) => void;
   /** 編集中 DayRow のアクティブ行に対する過去ヒット件数（検索欄が空のときのみ意味を持つ） */
@@ -12,6 +13,15 @@ type Props = {
   onActiveCountTap?: () => void;
 };
 
+/**
+ * 検索バー。
+ *
+ * iOS Safari × IME の多重反映バグ回避のため input は **uncontrolled** で実装する
+ * （`docs/IOS-SAFARI-NOTES.md` §1 参照）。
+ * - DOM 値は input が自前で持ち、親 state は永続化（SearchResults 表示用）のためだけに更新する
+ * - クリア（✕）は ref 経由で imperative にリセットし focus を保つ
+ * - 外部から値を流し込みたい場合（バッジタップ・結果ピック）は親側で `key` を変えて再マウントする
+ */
 export function SearchBar({
   value,
   onChange,
@@ -20,13 +30,30 @@ export function SearchBar({
   onActiveCountTap,
 }: Props) {
   const ime = useComposition();
+  const inputRef = useRef<HTMLInputElement>(null);
+  // バッジ／クリアボタンの表示判定に使う、現在の入力値のローカル追跡。
+  // input は uncontrolled なので value prop を `value=` に渡さない代わりに、
+  // 表示制御用のローカル state として保持する（再描画で input を上書きしない）。
+  const [currentValue, setCurrentValue] = useState<string>(value);
+
   function handle(e: ChangeEvent<HTMLInputElement>) {
     if (ime.shouldSkipChange(e.target.value, e.nativeEvent)) return;
+    setCurrentValue(e.target.value);
     onChange(e.target.value);
   }
+
+  function handleClear() {
+    if (inputRef.current) {
+      inputRef.current.value = "";
+      inputRef.current.focus();
+    }
+    setCurrentValue("");
+    onChange("");
+  }
+
   // 検索欄が空（空白のみを含む）かつ 件数 > 0 かつ タップハンドラが渡されているときだけ
   // バッジを出す（結果パネルとの重複回避＋「押しても何も起きない」バッジの回避）
-  const showBadge = value.trim() === "" && activeCount > 0 && onActiveCountTap != null;
+  const showBadge = currentValue.trim() === "" && activeCount > 0 && onActiveCountTap != null;
   const badgeLabel = activeCount > activeCountCap ? `${activeCountCap}+` : `${activeCount}`;
   return (
     <div className="flex items-center gap-2 px-3 py-2 bg-white border-b border-neutral-200">
@@ -46,13 +73,15 @@ export function SearchBar({
         <path d="m21 21-4.3-4.3" />
       </svg>
       <input
+        ref={inputRef}
         type="search"
-        value={value}
+        defaultValue={value}
         onCompositionStart={ime.onCompositionStart}
         onCompositionEnd={(e) => {
           ime.onCompositionEnd();
           const committed = e.currentTarget.value;
           ime.markCommitted(committed);
+          setCurrentValue(committed);
           onChange(committed);
         }}
         onChange={handle}
@@ -73,10 +102,10 @@ export function SearchBar({
           {badgeLabel}
         </button>
       )}
-      {value.length > 0 && (
+      {currentValue.length > 0 && (
         <button
           type="button"
-          onClick={() => onChange("")}
+          onClick={handleClear}
           className="text-neutral-400 text-sm px-2 py-1 min-w-11 min-h-11 flex items-center justify-center"
           aria-label="検索をクリア"
         >

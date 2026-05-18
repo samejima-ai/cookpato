@@ -32,6 +32,9 @@ export default function App() {
   }, []);
   const dismissToast = useCallback(() => setToast(null), []);
   const [query, setQuery] = useState("");
+  // SearchBar の input は uncontrolled。外部から値を流し込む（バッジタップ・結果ピック）
+  // 際は searchBarKey を変えて再マウントし defaultValue から拾い直す。
+  const [searchBarKey, setSearchBarKey] = useState(0);
   const [scrollTarget, setScrollTarget] = useState<DateKey | undefined>(undefined);
   const [editingTarget, setEditingTarget] = useState<EditingTarget | null>(null);
   const [activeQuery, setActiveQuery] = useState("");
@@ -92,6 +95,7 @@ export default function App() {
   function handlePickResult(date: DateKey) {
     setScrollTarget(date);
     setQuery("");
+    setSearchBarKey((k) => k + 1);
     // 同じ日付が連続選択された場合も再スクロールできるよう、次フレームで未定義化
     requestAnimationFrame(() => setScrollTarget(undefined));
   }
@@ -99,6 +103,7 @@ export default function App() {
   function handleActiveCountTap() {
     // バッジタップで検索欄にクエリを流し込み、既存の結果パネルを開く
     setQuery(debouncedActiveQuery);
+    setSearchBarKey((k) => k + 1);
   }
 
   // FloatingEditor からの確定
@@ -222,6 +227,7 @@ export default function App() {
     <div className="flex flex-col h-full max-w-xl mx-auto">
       <header className="relative shrink-0 safe-top">
         <SearchBar
+          key={searchBarKey}
           value={query}
           onChange={setQuery}
           activeCount={activeCount}
