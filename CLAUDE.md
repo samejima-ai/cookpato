@@ -70,6 +70,11 @@ Layer 1 での変更禁止。変更が必要な場合は仕様レビュー結果
 - ユーティリティはケバブケース（例：`normalize.ts`）
 - `any` 型の使用禁止。やむを得ない場合は `unknown` + type guard
 - `console.log` を本番コードに残さない（デバッグ後削除）
+- **ユーザー入力を受ける `<input>` / `<textarea>` は uncontrolled (`defaultValue`) パターンを既定とする**
+  - 理由：iOS Safari の日本語 IME（フリック入力）と controlled `value={state}` の組み合わせで、IME 未確定中の親 state 反映抑止と React の DOM 上書きが衝突し、文字消失・多重反映・削除キー無反応が発生する（詳細・実体験事例は `docs/IOS-SAFARI-NOTES.md` §1）
+  - 親 state は永続化や派生表示（検索結果パネル等）のためだけに更新し、DOM の `value` 属性は React で制御しない
+  - 外部から値を流し込みたい場合（クリア・候補流し込み等）は親側で `key` を変えて再マウントするか、ref 経由で imperative に書き換える
+  - 例外：IME を伴わない単一文字種の入力（`type="number"` 等）は controlled でも安全
 - UI文言は全て日本語。エラーメッセージ等も日本語
 - コメントは日本語OK。ただし自明なコードには付けない
 
@@ -109,6 +114,8 @@ Layer 1 での変更禁止。変更が必要な場合は仕様レビュー結果
 - ユーザー追跡（Analytics、Sentry等）
 - `any` 型、`@ts-ignore`（やむを得ない場合はコメントで理由明記）
 - 依存パッケージの無計画な追加（追加時は理由をコミットメッセージに記載）
+- **IME を伴うテキスト入力での controlled パターン**（`<input value={state}>` / `<textarea value={state}>`）
+  - 理由：iOS Safari で IME と競合し文字消失・多重反映が発生（`docs/IOS-SAFARI-NOTES.md` §1）。`defaultValue` + ref または `key` 再マウントで代替する。詳細運用は「## コーディング規約」参照
 
 ---
 

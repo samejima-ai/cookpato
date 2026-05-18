@@ -7,6 +7,8 @@ iPhone 11 / iOS Safari をターゲットとする本プロジェクトで実際
 
 ## 1. IME × controlled input は壊れる
 
+> **規約格上げ済み**: 本パターンは `CLAUDE.md` の「## コーディング規約」（uncontrolled 必須）と「## 禁止事項」（controlled パターン禁止）に規約化されている。L1 自己検証は `sensors/inferential.md` §5 で照合する。新規入力 UI 追加時は本セクションを必読。
+
 ### 症状
 日本語フリック入力中に文字が消える、多重反映される、削除キー無反応。
 
@@ -25,6 +27,7 @@ iPhone 11 / iOS Safari をターゲットとする本プロジェクトで実際
 - `MemoField`（`src/components/DayRow.tsx`）— `key={dateKey}` で日付切替時に再マウント
 - ストック追加 input（`src/components/StockList.tsx`）— `key={draftResetKey}` で追加成功時に空に戻す
 - `StockNameEditInput`（`src/components/StockList.tsx`）— 編集モード進入時にだけマウント
+- `SearchBar`（`src/components/SearchBar.tsx`）— `defaultValue` + ref ベースの uncontrolled、外部値流し込みは親側で `key` 再マウント（2026-05-18 PR #37）
 
 ### 参考実装
 料理行 textarea（`DayRow.tsx`）は最初から `defaultValue` で uncontrolled。これがあるべき形。
@@ -121,3 +124,4 @@ React の `onPointerUp` / `onPointerCancel` は、**要素内でリリースさ�
 ## 履歴
 
 - 2026-05-04: ストック改修サイクル（PR #18）で 1〜4 すべてを実体験。本ノートとして集約。
+- 2026-05-18: SearchBar で §1 を再発（PR #37 で修正）。`CLAUDE.md` 規約格上げ＋`sensors/inferential.md` §5 追加で再発防止経路を確立。

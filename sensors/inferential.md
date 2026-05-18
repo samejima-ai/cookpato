@@ -89,6 +89,18 @@ LLM による確率的判定。計算的センサー全通過後に実行する�
 
 ---
 
+## 5. 技術パターン整合チェック（CLAUDE.md 規約照合）
+
+新規実装・改修時に、過去サイクルで実体験した踏み抜きパターンの再発を防ぐ目視チェック。
+詳細・実体験事例は `docs/IOS-SAFARI-NOTES.md`、規約本体は `CLAUDE.md` の「## コーディング規約」「## 禁止事項」を参照。
+
+### 入力 UI のパターン
+- [ ] 新規追加した `<input>` / `<textarea>` は uncontrolled (`defaultValue`) パターンか（IME を伴うテキスト入力で `value={state}` controlled パターンを使っていないか）
+- [ ] 既存 input を改修する際、uncontrolled → controlled へ後退させていないか
+- [ ] 外部から値を流し込む必要がある場合、`key` 再マウントまたは ref 経由の imperative 更新で対応しているか（親 state を `value=` に直結していないか）
+
+---
+
 ## 判定基準
 
 - 全項目クリア → 献上可能
