@@ -367,9 +367,10 @@ EditingTarget = { kind: "line", dateKey: DateKey, lineIndex: number }
 - 将来 妻の運用が変化（過去日追記の要望発生等）した場合は再評価する（DONT.md「将来スコープに入る可能性があるもの」参照）
 
 ##### 影響範囲
-- `src/components/DayRow.tsx` の `<button onClick={handleAddLine} aria-label="行を追加">＋</button>` ブロックを撤去
-- 撤去後は `<ul>` の lines.map(...) で終わる構造になり、`handleAddLine` プロップ（および `Calendar` 経由の `App.handleAddLine`、`useAppData.addLineAt`）が他に使用箇所なしになれば撤去対象（L1 で確認）
-- 既存テスト（`tests/DayRow.test.tsx` 等）で「＋追加」ボタンに依存しているケースは新経路（`↓+`）に置換または削除
+- `src/components/DayRow.tsx` の `<button onClick={handleAddLine} aria-label="行を追加">＋</button>` ブロックを撤去（本リリースで実施済）
+- `DayRowProps.onAddLine` プロップ、`CalendarProps.onRequestAddLine` 経由の伝搬、`App.tsx` の `handleRequestAddLine` ハンドラを撤去（他に呼び出しなし確認済、本リリースで実施済）
+- `useAppData.ts` の `addLineAt(date, "end")` API を撤去（本リリースで実施済。末尾追加は F013 `insertLineAt(..., "below")` で代替可能）
+- 既存テスト（`tests/DayRow.test.tsx` 等）の「＋追加」ボタン依存テストは「廃止確認」テストへ置換、`tests/StockList.test.tsx` / `tests/useAppData.test.tsx` のモック・テストから `addLineAt` を撤去（本リリースで実施済）
 
 #### 優先順位
 中（妻の明示要望、運用上の小さな欠落を埋める）

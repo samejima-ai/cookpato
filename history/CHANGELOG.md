@@ -1,9 +1,9 @@
 # 変更履歴
 
-## 2026-05-21 (LC=1 F013 改訂・行末「＋追加」ボタン廃止 L0 改修サイクル) [L0 のみ・実装は次サイクル]
+## 2026-05-21 (LC=1 F013 改訂・行末「＋追加」ボタン廃止 L0+L1 完遂サイクル)
 
 妻運用後の評価で「料理名リスト最下部の＋追加ボタンは F013 長押しメニューの `↓+` と重複しているため不要」と判明（ユーザー発話 2026-05-21）。
-SPEC 改訂を伴う機能削除のため L0 spec-architect で対応。実コード撤去は L1 で実施。
+L0 spec-architect で SPEC 改訂、続けて L1 autonomous-dev で実コード撤去・テスト整備まで同 PR（#40）で完了。
 
 ### 改訂（F013 行間挿入 + 行末追加 UI 廃止）
 - SPEC.md F013「行間挿入」セクション改訂：
@@ -15,11 +15,11 @@ SPEC 改訂を伴う機能削除のため L0 spec-architect で対応。実コ�
 - DONT.md「哲学による却下判断」表に **「行末「＋追加」常設ボタン」** 行を追加：早い・簡単 を損ねる、F013 `↓+` で代替可能、過去日追記ユースケースは妻運用上ほぼゼロ
 - history/INTENT.md F013 を改訂版に書き換え：状態に「2026-05-21 改訂」明記、改訂歴セクション追加、却下案の「既存末尾「＋追加」を「位置選択モード」に変更」に取り消し線を追加（前提条件喪失で無効化）、廃止要素として「行末「＋追加」常設ボタン」「`addLineAt(date, "end")` の `＋追加` ボタン経由呼び出し」を取り消し線で記録
 
-### 廃止（**SPEC レベルの deprecation のみ。コード削除は次サイクル L1**）
-本サイクルは L0 のみで、以下は仕様文書上で「廃止」と確定したもの。実装コードの物理削除は L1 申し送り項目で次サイクルに行う。
-- `src/components/DayRow.tsx` の `<button onClick={handleAddLine} aria-label="行を追加">＋</button>` ブロック（行末常設「＋」ボタン）— SPEC 削除済、コード削除は L1
-- `DayRowProps.handleAddLine` プロップ、`CalendarProps` 経由の伝搬、`App.tsx` の `handleAddLine` ハンドラ — 他に呼び出しがなければ撤去（L1 で確認）
-- `useAppData.ts` の `addLineAt(date, "end")` API — F013 の `insertLineAt` に統合可能か L1 で評価。`bulkAddEmptyLines`（F010 自動 4 空行生成）は別経路のため維持
+### 撤去（SPEC deprecation + 実装コード物理削除、本 PR で完了）
+本サイクルで仕様文書上の「廃止」確定と実装コードの物理削除をワンショットで実施。
+- `src/components/DayRow.tsx` の `<button onClick={handleAddLine} aria-label="行を追加">＋</button>` ブロック（行末常設「＋」ボタン）— SPEC 削除 + 実装撤去済
+- `DayRow.tsx` の `onAddLine` プロップ + ローカルハンドラ `handleAddLine`、`Calendar.tsx` の `onRequestAddLine` 中継、`App.tsx` の `handleRequestAddLine` ハンドラ — 全経路撤去済
+- `useAppData.ts` の `addLineAt(date, "end")` API — 他に呼び出し箇所なし確認の上で本 PR で撤去（末尾追加は F013 `insertLineAt(..., "below")` で代替）。`bulkAddEmptyLines`（F010 自動 4 空行生成）は別経路のため維持
 
 ### 仕様確定（inCheerWindow 外空日の追加経路）
 - 過去日 / today+7 以降の空日（lines.length === 0）への **新規追加経路は提供しない**（妻運用上ほぼ発生しないことを 2026-05-21 ユーザー確認で取得）
@@ -40,15 +40,27 @@ SPEC 改訂を伴う機能削除のため L0 spec-architect で対応。実コ�
 ### 哲学整合性チェック
 - 行末「＋追加」廃止：早い ○（常設ボタン 1 個減で操作面が軽くなる）/ 簡単 ○（機能重複解消、メンタル混乱低減）/ 便利 △（inCheerWindow 外空日への追加経路喪失だが妻運用上ほぼ影響なし）— **3 語すべてに寄与（または損ねない）** で採択基準を満たす
 
-### 次サイクル（L1 実装）への申し送り
-- `src/components/DayRow.tsx`: 256-264 行の `{/* 「＋追加」ボタン */}` ブロック削除、関連の `handleAddLine` プロップを props 型から除去
-- `src/components/Calendar.tsx`: `Calendar` の Props から `onAddLine` / `handleAddLine` 系を除去（line 24 のコメントも撤去）
-- `src/App.tsx`: 148 行付近の `// ＋追加 → 新規空行追加 + その行を編集モードへ` コメントと `handleAddLine` ハンドラを撤去、`Calendar` への注入から削除
-- `src/hooks/useAppData.ts`: `addLineAt(date, "end")` API を撤去するか F013 の `insertLineAt` 内部呼び出しに統合するかは L1 評価
-- `tests/DayRow.test.tsx` 等：「＋追加」ボタンの存在前提テストを `↓+`（末尾行長押し）経由テストに置換 or 削除。空日（inCheerWindow 内）の ★ プレースホルダタップ経路テストは維持
-- 計算的センサー（typecheck / lint / format / test / build）すべて PASS まで実装
-- 推論的センサー（SPEC F013 改訂版・DONT.md 哲学却下表との照合）で「＋追加 痕跡なし」を確認
-- iPhone 11 実機での操作確認は妻にフィードバック依頼（実機確認は L1 内では完結しない）
+### L1 実装内容（本 PR で完了）
+- `src/components/DayRow.tsx`: 行末「＋追加」ボタンの `<button>` ブロックを削除、`onAddLine` プロップと `handleAddLine` ローカルハンドラを撤去
+- `src/components/Calendar.tsx`: `onRequestAddLine` プロップと DayRow への `onAddLine` 注入を撤去
+- `src/App.tsx`: `handleRequestAddLine` ハンドラと Calendar への `onRequestAddLine` 注入を撤去
+- `src/hooks/useAppData.ts`: `addLineAt` 実装と `AppDataApi` 型からの API 露出を撤去（末尾追加は F013 `insertLineAt` で代替可能）
+- `tests/DayRow.test.tsx`: 「＋追加」describe を「廃止確認（行末追加ボタンが描画されない）」テストに置換
+- `tests/StockList.test.tsx`: `makeApi` モックから `addLineAt: vi.fn()` を撤去（型整合）
+- `tests/useAppData.test.tsx`: `addLineAt` describe（3 件）を撤去、`insertLineAt` `below` テストのコメント文言修正
+
+### 計算的センサー結果（5 層検出スタックの第 1 層）
+| 検査 | 結果 |
+|---|---|
+| 型チェック（`tsc --noEmit`） | PASS |
+| Lint（`biome check`） | PASS |
+| Format（`biome format`） | PASS |
+| テスト（`vitest run`） | PASS 224/224（＋追加関連 4 件削除で 228 → 224） |
+| ビルド（`tsc + vite build`） | PASS |
+
+### 実機確認
+- iPhone 11 / iOS Safari（Vercel preview URL 経由）での操作確認 — **OK**（2026-05-21、ユーザー報告）
+  - `↓+`（末尾行長押し → メニュー）での末尾追加が「＋追加」と同等以上の手早さで成立することを確認
 
 ---
 

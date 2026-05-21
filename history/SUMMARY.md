@@ -47,5 +47,5 @@
 - 2026-05-17 サイクル(6): F007 L1 実装（`useBackup` クリップボード化 / `BackupBadge` 削除 / `BackupCopyButton` + `Toast` 新規 / `BackupRestore` 2 経路化 / 旧 `lastExport` キー即時削除）→ PR #36
 - 2026-05-17 サイクル(7): F007 改訂2 動作確認フィードバック対応（インライン配置 → 単一「バックアップ」ボタン + 中央 modal 集約。SPEC §「エントリ UI」追加、`BackupCopyButton` / `BackupRestore` 廃止、`BackupSheet` 新規）
 - 2026-05-17 サイクル(8): F007 改訂3 swipe-reveal 対応（常時表示 → ヘッダー vertical swipe で 3 秒間 slide-in/out。`StockList` に swipe 検出 + reveal タイマー追加、`backupSlot` → `backupTrigger` プロップ名変更）
-- 2026-05-21 サイクル(1): F013 改訂・行末「＋追加」ボタン廃止 L0 改修（SPEC.md F013「行末追加 UI の廃止」セクション新設、DONT.md 哲学却下表追記、INTENT.md F013 改訂歴 + 取り消し線追加）→ 本サイクル（L1 実装は次サイクル）
+- 2026-05-21 サイクル(1): F013 改訂・行末「＋追加」ボタン廃止（L0 改修 + L1 実装を同 PR #40 で完遂、実機確認 OK。SPEC.md F013「行末追加 UI の廃止」セクション新設、DONT.md 哲学却下表追記、INTENT.md F013 改訂歴 + 取り消し線追加、DayRow/Calendar/App/useAppData の実コード撤去、テスト整備、計算的センサー全 PASS）
 - 哲学「早い・簡単・便利」は全機能・全将来判断に適用。F007 改訂でも本指標で方針判定済（採択 Option D が 3 語すべてに寄与）。＋追加ボタン廃止も「早い」（常設ボタン削減）+「簡単」（機能重複解消）に寄与
