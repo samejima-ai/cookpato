@@ -30,7 +30,6 @@ function makeApi(overrides?: Partial<AppDataApi>): AppDataApi {
     restoreData: vi.fn(),
     setMealsText: vi.fn(),
     bulkAddEmptyLines: vi.fn(),
-    addLineAt: vi.fn(),
     updateLineAt: vi.fn(),
     setMemo: vi.fn(),
     toggleLine: vi.fn(),

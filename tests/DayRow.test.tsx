@@ -55,7 +55,6 @@ function baseProps() {
     onToggleCart: () => {},
     onDeleteLine: () => {},
     onInsertLineAt: (_i: number, _w: "above" | "below") => {},
-    onAddLine: () => {},
     onRequestEditLine: () => {},
     onRequestEditMemo: () => {},
     onLineWobbleEnter: () => {},
@@ -270,22 +269,17 @@ describe("DayRow", () => {
     });
   });
 
-  describe("「＋追加」ボタン（行末常設）", () => {
-    it("＋追加ボタンが描画される", () => {
+  describe("行末常設「＋追加」ボタンの廃止（2026-05-21）", () => {
+    it("行末常設の追加ボタンは描画されない（F013 ↓+ に統合）", () => {
       render(<DayRow {...baseProps()} day={makeDay([{ text: "カレー" }])} />);
-      expect(screen.getByRole("button", { name: "行を追加" })).toBeTruthy();
+      // 「行を追加」aria-label は wobble メニュー内の「の上に行を追加」「の下に行を追加」
+      // でのみ使われ、行末の単独ボタンとしては存在しないことを保証する
+      expect(screen.queryByRole("button", { name: "行を追加" })).toBeNull();
     });
 
-    it("空日でも＋追加ボタンが描画される", () => {
+    it("空日でも行末追加ボタンは描画されない", () => {
       render(<DayRow {...baseProps()} />);
-      expect(screen.getByRole("button", { name: "行を追加" })).toBeTruthy();
-    });
-
-    it("クリックで onAddLine が呼ばれる", () => {
-      const onAddLine = vi.fn();
-      render(<DayRow {...baseProps()} onAddLine={onAddLine} />);
-      fireEvent.click(screen.getByRole("button", { name: "行を追加" }));
-      expect(onAddLine).toHaveBeenCalledTimes(1);
+      expect(screen.queryByRole("button", { name: "行を追加" })).toBeNull();
     });
   });
 

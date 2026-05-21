@@ -170,44 +170,6 @@ describe("useAppData", () => {
     });
   });
 
-  describe("addLineAt（行末追加）", () => {
-    it("空日に呼ぶと空行が 1 つ末尾に append される", () => {
-      const { result } = renderHook(() => useAppData());
-      act(() => {
-        result.current.addLineAt("2030-01-01", "end");
-      });
-      expect(result.current.data.meals["2030-01-01"]?.lines.length).toBe(1);
-      expect(result.current.data.meals["2030-01-01"]?.lines[0]?.text).toBe("");
-    });
-
-    it("既存行がある日に呼ぶと末尾に append される", () => {
-      const { result } = renderHook(() => useAppData());
-      act(() => {
-        result.current.setMealsText("2030-01-01", "カレー\nサラダ");
-      });
-      act(() => {
-        result.current.addLineAt("2030-01-01", "end");
-      });
-      const lines = result.current.data.meals["2030-01-01"]?.lines ?? [];
-      expect(lines).toHaveLength(3);
-      expect(lines[0]?.text).toBe("カレー");
-      expect(lines[1]?.text).toBe("サラダ");
-      expect(lines[2]?.text).toBe("");
-    });
-
-    it("memo を持つ日に呼んでも memo が保持される", () => {
-      const { result } = renderHook(() => useAppData());
-      act(() => {
-        result.current.setMemo("2030-01-01", "辛口");
-      });
-      act(() => {
-        result.current.addLineAt("2030-01-01", "end");
-      });
-      expect(result.current.data.meals["2030-01-01"]?.memo).toBe("辛口");
-      expect(result.current.data.meals["2030-01-01"]?.lines.length).toBe(1);
-    });
-  });
-
   it("setMealsText で1日分のテキストを保存", () => {
     const { result } = renderHook(() => useAppData());
     act(() => {
@@ -1064,7 +1026,7 @@ describe("useAppData", () => {
       expect(insertedAt).toBe(0);
     });
 
-    it("末尾行の下への挿入：＋追加と等価に末尾に空行が積まれる", () => {
+    it("末尾行の下への挿入：末尾に空行が積まれる", () => {
       const { result } = renderHook(() => useAppData());
       act(() => {
         result.current.setMealsText("2030-01-01", "カレー\nサラダ");
