@@ -21,8 +21,6 @@ type Props = {
   onRequestEditLine: (dateKey: DateKey, lineIndex: number) => void;
   /** メモタップで FloatingEditor を起動する */
   onRequestEditMemo: (dateKey: DateKey) => void;
-  /** ＋追加ボタン押下で新規空行追加 + その行を FloatingEditor で編集 */
-  onRequestAddLine: (dateKey: DateKey) => void;
   /** F013: 行間挿入。挿入後はフロート編集を起動する */
   onRequestInsertLine: (dateKey: DateKey, lineIndex: number, where: "above" | "below") => void;
   /** F012: 日付ラベル長押し → 移動モード開始（同日再長押しは解除） */
@@ -47,7 +45,6 @@ export function Calendar({
   swapFlashDates,
   onRequestEditLine,
   onRequestEditMemo,
-  onRequestAddLine,
   onRequestInsertLine,
   onLongPressDate,
   onTapDate,
@@ -242,7 +239,6 @@ export function Calendar({
                   onToggleCart={(i) => api.toggleCart(date, i)}
                   onDeleteLine={(i) => api.deleteLine(date, i)}
                   onInsertLineAt={(i, where) => onRequestInsertLine(date, i, where)}
-                  onAddLine={() => onRequestAddLine(date)}
                   onRequestEditLine={(i) => onRequestEditLine(date, i)}
                   onRequestEditMemo={() => onRequestEditMemo(date)}
                   onLineWobbleEnter={onLineWobbleEnter}

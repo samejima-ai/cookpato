@@ -39,8 +39,6 @@ type Props = {
   onDeleteLine: (lineIndex: number) => void;
   /** F013: 対象行の「上」または「下」に空行を挿入し即フロート編集を起動する */
   onInsertLineAt: (lineIndex: number, where: "above" | "below") => void;
-  /** 「＋追加」ボタン押下時：空 Line を append + 即座にフロートで編集する */
-  onAddLine: () => void;
   /** 行タップ：その行を FloatingEditor で編集する */
   onRequestEditLine: (lineIndex: number) => void;
   /** ちょいメモタップ：メモを FloatingEditor で編集する */
@@ -70,7 +68,6 @@ export function DayRow({
   onToggleCart,
   onDeleteLine,
   onInsertLineAt,
-  onAddLine,
   onRequestEditLine,
   onRequestEditMemo,
   onLineWobbleEnter,
@@ -123,12 +120,6 @@ export function DayRow({
   });
 
   const pendingText = pendingDelete !== null ? (lines[pendingDelete]?.text ?? "") : "";
-
-  const handleAddLine = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    tapFeedback();
-    onAddLine();
-  };
 
   return (
     <div className={`flex gap-3 px-3 py-2 border-b border-neutral-100 ${bgClass}`}>
@@ -253,15 +244,6 @@ export function DayRow({
             );
           })}
         </ul>
-        {/* 「＋追加」ボタン：行末常設。空 Line を 1 つ append して FloatingEditor を起動する（親が処理） */}
-        <button
-          type="button"
-          onClick={handleAddLine}
-          aria-label="行を追加"
-          className="w-11 h-11 flex items-center justify-center text-neutral-300 active:text-neutral-500 touch-manipulation"
-        >
-          ＋
-        </button>
       </div>
       {pendingDelete !== null && (
         <ConfirmDeleteDialog

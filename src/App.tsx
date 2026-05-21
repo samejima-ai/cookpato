@@ -145,19 +145,6 @@ export default function App() {
     setEditingTarget({ kind: "memo", dateKey });
   }, []);
 
-  // ＋追加 → 新規空行追加 + その行を編集モードへ
-  const handleRequestAddLine = useCallback(
-    (dateKey: DateKey) => {
-      const before = api.data.meals[dateKey]?.lines.length ?? 0;
-      api.addLineAt(dateKey, "end");
-      // append 後の新規行 index は `before`（addLineAt は同期的に setState を発火するため
-      // 次フレームには反映済み。即時 EditingTarget をセットしてフロートを開く）
-      setSwapSource(null);
-      setEditingTarget({ kind: "line", dateKey, lineIndex: before });
-    },
-    [api],
-  );
-
   // F013 行間挿入：対象行の上／下に空行を挿入し、即その空行をフロート編集する
   const handleRequestInsertLine = useCallback(
     (dateKey: DateKey, lineIndex: number, where: "above" | "below") => {
@@ -252,7 +239,6 @@ export default function App() {
           swapFlashDates={swapFlashDates}
           onRequestEditLine={handleRequestEditLine}
           onRequestEditMemo={handleRequestEditMemo}
-          onRequestAddLine={handleRequestAddLine}
           onRequestInsertLine={handleRequestInsertLine}
           onLongPressDate={handleLongPressDate}
           onTapDate={handleTapDate}

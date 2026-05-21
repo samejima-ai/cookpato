@@ -27,8 +27,6 @@ export type AppDataApi = {
    * 冪等：既に count 個以上の空行を持つ日は no-op。
    */
   bulkAddEmptyLines: (dates: DateKey[], count: number) => void;
-  /** その日に空 Line を 1 つ append する。「＋追加」ボタンから呼ぶ。 */
-  addLineAt: (date: DateKey, position: "end") => void;
   /**
    * 指定日の lineIndex 行の text を更新する（フロート入力フォーム F011 から呼ぶ）。
    * テキスト変更時は done を false にリセット、cart を解除する（textToLines と同じ意味論）。
@@ -229,20 +227,6 @@ export function useAppData(): AppDataApi {
       }
       if (!mutated) return prev;
       return { ...prev, data: { ...prev.data, meals: nextMeals } };
-    });
-  }, []);
-
-  const addLineAt = useCallback((date: DateKey, _position: "end") => {
-    setState((prev) => {
-      const day = prev.data.meals[date];
-      const before = day?.lines ?? [];
-      const nextLines: MealLine[] = [...before, { text: "", done: false }];
-      const nextDay: DayMeals = { lines: nextLines };
-      if (day?.memo) nextDay.memo = day.memo;
-      return {
-        ...prev,
-        data: { ...prev.data, meals: { ...prev.data.meals, [date]: nextDay } },
-      };
     });
   }, []);
 
@@ -595,7 +579,6 @@ export function useAppData(): AppDataApi {
     restoreData,
     setMealsText,
     bulkAddEmptyLines,
-    addLineAt,
     updateLineAt,
     setMemo,
     toggleLine,
