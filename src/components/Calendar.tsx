@@ -30,6 +30,8 @@ type Props = {
   onRequestEditMemo: (dateKey: DateKey) => void;
   /** F013: 行間挿入。挿入後はフロート編集を起動する */
   onRequestInsertLine: (dateKey: DateKey, lineIndex: number, where: "above" | "below") => void;
+  /** 空日（today+7 以降）の ＋マークタップ → 空行を複数展開する */
+  onRequestExpandDay: (dateKey: DateKey) => void;
   /** F012: 日付ラベル長押し → 移動モード開始（同日再長押しは解除） */
   onLongPressDate: (dateKey: DateKey) => void;
   /** F012: 移動モード中の日付ラベルタップ → スワップ実行（同日再タップは解除） */
@@ -53,6 +55,7 @@ export function Calendar({
   onRequestEditLine,
   onRequestEditMemo,
   onRequestInsertLine,
+  onRequestExpandDay,
   onLongPressDate,
   onTapDate,
   onLineWobbleEnter,
@@ -244,6 +247,7 @@ export function Calendar({
                   onToggleCart={(i) => api.toggleCart(date, i)}
                   onDeleteLine={(i) => api.deleteLine(date, i)}
                   onInsertLineAt={(i, where) => onRequestInsertLine(date, i, where)}
+                  onExpandEmptyDay={() => onRequestExpandDay(date)}
                   onRequestEditLine={(i) => onRequestEditLine(date, i)}
                   onRequestEditMemo={() => onRequestEditMemo(date)}
                   onLineWobbleEnter={onLineWobbleEnter}

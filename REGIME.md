@@ -150,3 +150,9 @@
   - 方針: 「入力導線だけ解放」採用。`inCheerWindow`（応援＋入力兼用）を「応援＝today〜today+6 据え置き」「入力可否＝today 以降」に分離。未来空日の入力導線（★起点）を解放、過去日は据え置き
   - 儀式記録: レベル 2 で実行（F1 サマリ提示 / F2 前提崩れ検出・予約された再評価として整理・矛盾ゼロ / F3 履歴更新予告）
   - 実装も同 PR で完了（date `isInputableDate` 追加 / cheer `computeCheerWindow` 撤去 / Calendar・DayRow の canInput 化 + 未来空日の入力起点★ / テスト整備。App・useAppData は変更なし）。計算的センサー全 PASS（test 225/225）
+- 2026-05-31（追補）: 未来空日の入力導線を ＋マーク → ★5行展開に変更 L0+L1 サイクル
+  - ユーザー発話: 「星を1行よりも＋マークを配置してタップで星を5行表示する方がいいな」
+  - スコア: S=2 / U=0 / R=1 / N=1 → 合計 3 点、M1 維持。前サイクルの UX 追補
+  - 方針: 未来空日（today+7 以降）の入力導線を「★1本」→「＋マーク（タップで `bulkAddEmptyLines([date], 5)` → ★5行展開）」に変更。応援ウィンドウ（today〜today+6）の自動4空行は据え置き、適用は today+7 以降のみ
+  - 儀式記録: レベル 2（F1 / F2 復活要求1＝＋マークは空日専用で廃止済み常設ボタンと別物と整理 / F3）
+  - 実装も同 PR で完了（DayRow `AddDayButton` 新設・`onExpandEmptyDay` / Calendar `onRequestExpandDay` 中継 / App `handleRequestExpandDay`＋定数。useAppData は既存 `bulkAddEmptyLines` 流用で変更なし）。計算的センサー全 PASS（test 227/227）

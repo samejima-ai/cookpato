@@ -39,6 +39,8 @@ type Props = {
   onDeleteLine: (lineIndex: number) => void;
   /** F013: 対象行の「上」または「下」に空行を挿入し即フロート編集を起動する */
   onInsertLineAt: (lineIndex: number, where: "above" | "below") => void;
+  /** 行データの無い空日（today+7 以降）の ＋マークタップ：空行を複数展開する */
+  onExpandEmptyDay: () => void;
   /** 行タップ：その行を FloatingEditor で編集する */
   onRequestEditLine: (lineIndex: number) => void;
   /** ちょいメモタップ：メモを FloatingEditor で編集する */
@@ -68,6 +70,7 @@ export function DayRow({
   onToggleCart,
   onDeleteLine,
   onInsertLineAt,
+  onExpandEmptyDay,
   onRequestEditLine,
   onRequestEditMemo,
   onLineWobbleEnter,
@@ -193,16 +196,10 @@ export function DayRow({
       </div>
       <div className="flex-1 min-w-0">
         <ul>
-          {/* 行データが無い入力可能日（today 以降の空日）：入力起点★を 1 本だけ描画する。
-              自動 4 空行が入るのは today〜today+6 のみなので、それ以降の未来空日はここで起点を出す。
-              タップで先頭に空行を作り（insertLineAt 経由）、即フロート編集を起動する。 */}
-          {lines.length === 0 && canInput && (
-            <EmptyLineItem
-              key={`${dateKey}-start`}
-              isEditing={false}
-              onTap={() => onInsertLineAt(0, "below")}
-            />
-          )}
+          {/* 行データが無い入力可能日（today+7 以降の空日）：＋マークを 1 つ置く。
+              タップで空行を複数展開し（onExpandEmptyDay）、各 ★ をタップして入力する。
+              自動 4 空行が入る today〜today+6 はこの分岐を通らない（lines が既に埋まっている）。 */}
+          {lines.length === 0 && canInput && <AddDayButton onTap={onExpandEmptyDay} />}
           {lines.map((line, idx) => {
             if (line.text === "") {
               // 空行：canInput（today 以降）のみ ★ プレースホルダを描画。
@@ -296,6 +293,42 @@ function EmptyLineItem({ isEditing, onTap }: EmptyLineItemProps) {
           ★
         </span>
         <span className="flex-1 min-w-0 self-center text-neutral-300 text-sm pl-1">未入力の行</span>
+      </button>
+    </li>
+  );
+}
+
+type AddDayButtonProps = {
+  onTap: () => void;
+};
+
+/**
+ * 空日（today+7 以降の行データ無し日）の入力起点となる ＋マーク。
+ * タップで空行を複数展開する（onTap → 親が bulkAddEmptyLines を呼ぶ）。
+ * 展開後は各行が ★ プレースホルダ（EmptyLineItem）として描画され、タップでフロート編集に入る。
+ * 応援ウィンドウ（today〜today+6）の自動 4 空行と異なり、未来全域に ★ を散らさず
+ * 「書きたい日だけ ＋ から開く」ことでプレッシャーを抑える（SPEC「空日の入力可否」）。
+ */
+function AddDayButton({ onTap }: AddDayButtonProps) {
+  return (
+    <li className="flex items-stretch min-h-11">
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          tapFeedback();
+          onTap();
+        }}
+        aria-label="献立を書く（タップで入力欄を開く）"
+        className="flex items-stretch min-h-11 w-full cursor-text bg-transparent text-left"
+      >
+        <span
+          aria-hidden="true"
+          className="w-11 flex items-center justify-center shrink-0 self-center text-neutral-300 text-2xl leading-none"
+        >
+          ＋
+        </span>
+        <span className="flex-1 min-w-0 self-center text-neutral-300 text-sm pl-1">献立を書く</span>
       </button>
     </li>
   );
