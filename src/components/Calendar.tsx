@@ -2,8 +2,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import weekCompleteImg from "../assets/week-complete.png";
 import weekMedalImg from "../assets/week-medal.png";
 import type { AppDataApi } from "../hooks/useAppData";
-import { computeCheerDates, computeCheerWindow } from "../lib/cheer";
-import { addDaysKey, formatMonthHeader, isFirstOfMonth, isSameMonth, todayKey } from "../lib/date";
+import { computeCheerDates } from "../lib/cheer";
+import {
+  addDaysKey,
+  formatMonthHeader,
+  isFirstOfMonth,
+  isInputableDate,
+  isSameMonth,
+  todayKey,
+} from "../lib/date";
 import type { DateKey, EditingTarget } from "../types";
 import { DayRow } from "./DayRow";
 
@@ -80,8 +87,6 @@ export function Calendar({
     () => computeCheerDates(api.data.meals, today),
     [api.data.meals, today],
   );
-  // 今日を含む 7 日間の範囲（入力状態に依存しない）。空行★プレースホルダ表示判定に使う。
-  const cheerWindow = useMemo(() => computeCheerWindow(today), [today]);
 
   // お気に入りは正規化テキスト集合として保持されているので Set に変換して渡す
   const favoriteKeys = useMemo(() => new Set(api.data.favorites), [api.data.favorites]);
@@ -223,7 +228,7 @@ export function Calendar({
                   day={api.data.meals[date]}
                   isToday={date === today}
                   showCheer={cheerDates.has(date)}
-                  inCheerWindow={cheerWindow.has(date)}
+                  canInput={isInputableDate(date, today)}
                   favoriteKeys={favoriteKeys}
                   editingLineIndex={
                     editingTarget?.kind === "line" && editingTarget.dateKey === date

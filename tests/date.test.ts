@@ -4,6 +4,7 @@ import {
   formatDayLabel,
   formatMonthHeader,
   isFirstOfMonth,
+  isInputableDate,
   isSameMonth,
   isSunday,
   toDateKey,
@@ -44,5 +45,15 @@ describe("date lib", () => {
     // 2026-04-19 は日曜
     expect(isSunday("2026-04-19")).toBe(true);
     expect(isSunday("2026-04-20")).toBe(false);
+  });
+
+  it("isInputableDate は today 以降を true、過去日を false とする", () => {
+    const today = "2026-05-31";
+    expect(isInputableDate("2026-05-31", today)).toBe(true); // today 自身
+    expect(isInputableDate("2026-06-06", today)).toBe(true); // today+6（応援ウィンドウ最終日）
+    expect(isInputableDate("2026-06-07", today)).toBe(true); // today+7（旧仕様で書けなかった日）
+    expect(isInputableDate("2026-12-01", today)).toBe(true); // 遠い未来
+    expect(isInputableDate("2026-05-30", today)).toBe(false); // 昨日
+    expect(isInputableDate("2025-01-01", today)).toBe(false); // 過去
   });
 });

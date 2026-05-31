@@ -33,29 +33,18 @@ export function isEmptyDay(day: DayMeals | undefined): boolean {
  * 今日を含む 7 日間（today〜today+6）のうち空日の集合を返す。
  * 過去日は起点を today にしているため自然に対象外。
  *
- * シマエナガアイコン（日付列の装飾）表示判定に使う。1 行でも入力されると
+ * シマエナガアイコン（日付列の装飾＝応援表示）の表示判定に使う。1 行でも入力されると
  * isEmptyDay=false となり Set から外れる（＝シマエナガが消える）。
+ *
+ * 注：空行★プレースホルダ（入力導線）の表示判定はこの関数ではなく、
+ * `date.ts` の `isInputableDate`（today 以降か）で行う。応援装飾は 7 日間に限定するが、
+ * 入力可否は today 以降の全日に開いている（SPEC「入力できる期間」参照）。
  */
 export function computeCheerDates(meals: Record<DateKey, DayMeals>, today: DateKey): Set<DateKey> {
   const result = new Set<DateKey>();
   for (let i = 0; i < WINDOW_DAYS; i++) {
     const d = addDaysKey(today, i);
     if (isEmptyDay(meals[d])) result.add(d);
-  }
-  return result;
-}
-
-/**
- * 今日を含む 7 日間（today〜today+6）の DateKey 集合を返す（入力状態に依存しない）。
- *
- * 空行★プレースホルダ表示判定に使う。日付範囲のみを判定するため、
- * 1 行入力済みで残りが空行のような「部分入力日」でも、残りの空行に★が描画される
- * （`computeCheerDates` だと部分入力後に false になり、★が消えてしまう問題への対処）。
- */
-export function computeCheerWindow(today: DateKey): Set<DateKey> {
-  const result = new Set<DateKey>();
-  for (let i = 0; i < WINDOW_DAYS; i++) {
-    result.add(addDaysKey(today, i));
   }
   return result;
 }

@@ -433,3 +433,46 @@ SPEC 改訂 + L1 実装を 1 サイクルで実施。
 #### 体制事後評価（M1 単体モード、L0+L1 1 サイクル）
 - 妥当。SPEC 改訂 + 実装 + テスト維持を 1 サイクルで完遂
 - swipe gesture / tap 干渉の判定など実装上の細部判断（200ms 閾値、30px しきい値）も SPEC に記録してドリフト防止
+
+---
+
+### 2026-05-31: 入力できる期間の再評価 — 未来空日の入力導線解放（L0+L1 1 サイクル）
+
+妻から「6/7 以降の献立が書けない」報告。調査により、2026-05-21（PR #40）で確定した
+「today+7 以降の空日に新規追加経路を提供しない」が原因と特定。当時の前提
+「遠い未来日への先行入力はほぼ発生しない」が覆ったため、SPEC が予約していた再評価条件に従い、
+未来空日の入力導線を解放（応援表示の範囲は据え置き＝「入力導線だけ解放」）。
+
+#### 原因（調査結果）
+- 入力導線＝空行★プレースホルダ（`EmptyLineItem`）は `inCheerWindow`（today〜today+6）でのみ描画されていた
+- 自動 4 空行投入も today〜today+6 のみ。today+7 以降の空日は `meals[date]` が undefined（lines=[]）で行も★も無い
+- `updateLineAt` は `!day` ガードで空日に書けない（ただし `insertLineAt` は lines 無しでも先頭 1 行を生成可能）
+- → today+7 以降の空日は「入力導線が描画されない」＋「データも無い」の二重で、料理行を書き始める手段がゼロ（メモ欄だけは可）
+
+#### 変更点（App.tsx / useAppData.ts は変更なし）
+- `src/lib/date.ts`: `isInputableDate(key, today)` 追加（`date >= today`）
+- `src/lib/cheer.ts`: `computeCheerWindow` 撤去（★判定は date 比較へ）、`computeCheerDates`（シマエナガ）据え置き
+- `src/components/Calendar.tsx`: `cheerWindow` 撤去、DayRow へ `canInput={isInputableDate(date, today)}`
+- `src/components/DayRow.tsx`: prop `inCheerWindow` → `canInput`、空行★描画条件を `canInput` に変更、**行データ無し（lines=[]）かつ canInput の日に入力起点★を 1 本描画**（タップで `onInsertLineAt(0,"below")` → `insertLineAt` で先頭行生成 → フロート編集起動）
+- `tests/`: cheer（computeCheerWindow テスト撤去）/ DayRow（canInput 化 + 入力起点 3 テスト追加）/ date（isInputableDate テスト追加）
+- ドキュメント: SPEC.md F010/F013、DONT.md 却下表、history/INTENT.md F010/F013
+
+#### センサー結果（全項目 pass）
+| コマンド | 結果 |
+|---|---|
+| `npm run typecheck` | ✅ |
+| `npm run lint` | ✅ |
+| `npm test` | ✅ 225/225（cheer -2 / DayRow +3 / date +1） |
+| `npm run build` | ✅（dist 377.55 kB JS / gzip 89.10 kB、PWA 生成 OK） |
+
+#### 哲学整合（早い・簡単・便利）
+- **早い** ✓ — 新規常設ボタンなし、既存★パターンの拡張のみ
+- **簡単** ✓ — today 以降は一律入力可。妻が「どの日は書ける/書けない」を意識せず済む
+- **便利** ✓ — 書きたい未来日に書ける。報告された不便を直接解消
+
+#### 体制事後評価（M1 単体モード）
+- 妥当。lib/component の局所変更で完結（App/useAppData の API 変更なし）。機能の純増なく既存制約の緩和
+
+#### 既知未検証事項（実機 iPhone 11 / iOS Safari）
+- today+7 以降の未来空日タップ → 起点★ → 行生成 → フロート編集起動の一連の滑らかさ
+- 過去日タップで入力導線が出ないこと（据え置き挙動）の体感

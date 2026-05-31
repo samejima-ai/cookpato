@@ -66,3 +66,13 @@ export function isSameMonth(a: DateKey, b: DateKey): boolean {
   const db = fromDateKey(b);
   return da.getFullYear() === db.getFullYear() && da.getMonth() === db.getMonth();
 }
+
+/**
+ * その日が入力可能か（today 以降か）。
+ * DateKey は YYYY-MM-DD 形式で辞書順＝日付順のため、文字列比較で判定できる。
+ * 過去日（today 未満）には新規入力導線（★）を出さない（SPEC「入力できる期間」参照）。
+ * 「応援表示ウィンドウ（today〜today+6）」とは別概念：応援は装飾、本判定は入力可否。
+ */
+export function isInputableDate(key: DateKey, today: DateKey): boolean {
+  return key >= today;
+}

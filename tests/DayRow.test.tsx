@@ -43,7 +43,7 @@ function baseProps() {
     day: undefined as DayMeals | undefined,
     isToday: false,
     showCheer: false,
-    inCheerWindow: false,
+    canInput: false,
     favoriteKeys: new Set<string>(),
     editingLineIndex: null as number | null,
     isMemoEditing: false,
@@ -172,7 +172,7 @@ describe("DayRow", () => {
       render(
         <DayRow
           {...baseProps()}
-          inCheerWindow
+          canInput
           day={emptyLines(4)}
           onRequestEditLine={onRequestEditLine}
         />,
@@ -208,7 +208,7 @@ describe("DayRow", () => {
 
     it("空行★も editingLineIndex で背景色が付く", () => {
       const { container } = render(
-        <DayRow {...baseProps()} inCheerWindow day={emptyLines(2)} editingLineIndex={1} />,
+        <DayRow {...baseProps()} canInput day={emptyLines(2)} editingLineIndex={1} />,
       );
       const starItems = container.querySelectorAll("li");
       expect(starItems[0]?.className).not.toMatch(/bg-yellow-50/);
@@ -224,14 +224,14 @@ describe("DayRow", () => {
       ).length;
     }
 
-    it("inCheerWindow=true の日は空行ごとに★が描画される", () => {
-      const { container } = render(<DayRow {...baseProps()} inCheerWindow day={emptyLines(4)} />);
+    it("canInput=true の日は空行ごとに★が描画される", () => {
+      const { container } = render(<DayRow {...baseProps()} canInput day={emptyLines(4)} />);
       expect(countStars(container)).toBe(4);
     });
 
-    it("inCheerWindow=false の日は空行を描画しない", () => {
+    it("canInput=false の日は空行を描画しない", () => {
       const { container } = render(
-        <DayRow {...baseProps()} inCheerWindow={false} day={emptyLines(4)} />,
+        <DayRow {...baseProps()} canInput={false} day={emptyLines(4)} />,
       );
       expect(countStars(container)).toBe(0);
     });
@@ -245,10 +245,29 @@ describe("DayRow", () => {
           { text: "", done: false },
         ],
       };
-      const { container } = render(<DayRow {...baseProps()} inCheerWindow day={day} />);
+      const { container } = render(<DayRow {...baseProps()} canInput day={day} />);
       const checkButtons = screen.getAllByRole("button", { name: /完了にする/ });
       expect(checkButtons).toHaveLength(2);
       expect(countStars(container)).toBe(2);
+    });
+
+    it("canInput=true かつ行データなし（day=undefined）なら入力起点★が 1 本描画される", () => {
+      // today+7 以降の未来空日：自動 4 空行は入らないが、入力起点★を 1 本出す
+      const { container } = render(<DayRow {...baseProps()} canInput />);
+      expect(countStars(container)).toBe(1);
+    });
+
+    it("入力起点★のタップで onInsertLineAt(0, 'below') が呼ばれる（行生成→編集起動）", () => {
+      const onInsertLineAt = vi.fn();
+      render(<DayRow {...baseProps()} canInput onInsertLineAt={onInsertLineAt} />);
+      const star = screen.getByRole("button", { name: /未入力の行/ });
+      fireEvent.click(star);
+      expect(onInsertLineAt).toHaveBeenCalledWith(0, "below");
+    });
+
+    it("canInput=false（過去日）かつ行データなしなら入力起点★も出ない", () => {
+      const { container } = render(<DayRow {...baseProps()} canInput={false} />);
+      expect(countStars(container)).toBe(0);
     });
   });
 
@@ -483,7 +502,7 @@ describe("DayRow", () => {
     it("空行★（EmptyLineItem）には wobble 進入用の長押し領域がない", () => {
       // 空行は <button aria-label="未入力の行（タップで入力）">。
       // 通常 LineItem の長押し領域とは別構造で、長押しジェスチャは設定されていない。
-      const { container } = render(<DayRow {...baseProps()} inCheerWindow day={emptyLines(2)} />);
+      const { container } = render(<DayRow {...baseProps()} canInput day={emptyLines(2)} />);
       // 空行を長押ししようとしても、wobble は発生しない（↑＋ ボタンが現れない）
       const stars = container.querySelectorAll(
         "li button[aria-label='未入力の行（タップで入力）']",
