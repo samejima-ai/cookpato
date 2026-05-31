@@ -17,10 +17,10 @@ type Props = {
   /** 未来の空日ウィンドウに含まれる日か（SPEC「空状態の応援表示」） */
   showCheer: boolean;
   /**
-   * today〜today+6 の範囲内か（入力状態に依存しない）。
-   * 空行★プレースホルダ表示判定に使う。
+   * この日が入力可能か（today 以降か）。応援表示ウィンドウ（today〜today+6）とは別概念。
+   * true なら空行★プレースホルダ（入力導線）を描画する。過去日（today 未満）は false。
    */
-  inCheerWindow: boolean;
+  canInput: boolean;
   /** お気に入り判定用の正規化済みキー集合 */
   favoriteKeys: Set<string>;
   /** 現在フロート編集中の行 index（自分の日付の行であれば数値、無関係なら null） */
@@ -56,7 +56,7 @@ export function DayRow({
   day,
   isToday,
   showCheer,
-  inCheerWindow,
+  canInput,
   favoriteKeys,
   editingLineIndex,
   isMemoEditing,
@@ -193,11 +193,21 @@ export function DayRow({
       </div>
       <div className="flex-1 min-w-0">
         <ul>
+          {/* 行データが無い入力可能日（today 以降の空日）：入力起点★を 1 本だけ描画する。
+              自動 4 空行が入るのは today〜today+6 のみなので、それ以降の未来空日はここで起点を出す。
+              タップで先頭に空行を作り（insertLineAt 経由）、即フロート編集を起動する。 */}
+          {lines.length === 0 && canInput && (
+            <EmptyLineItem
+              key={`${dateKey}-start`}
+              isEditing={false}
+              onTap={() => onInsertLineAt(0, "below")}
+            />
+          )}
           {lines.map((line, idx) => {
             if (line.text === "") {
-              // 空行：inCheerWindow 内のみ ★ プレースホルダを描画。
+              // 空行：canInput（today 以降）のみ ★ プレースホルダを描画。
               // タップで FloatingEditor を起動して入力開始。
-              if (!inCheerWindow) return null;
+              if (!canInput) return null;
               const isThisEditing = editingLineIndex === idx;
               return (
                 <EmptyLineItem
