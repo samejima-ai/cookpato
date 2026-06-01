@@ -196,9 +196,9 @@ export function DayRow({
       </div>
       <div className="flex-1 min-w-0">
         <ul>
-          {/* 行データが無い入力可能日（today+7 以降の空日）：＋マークを 1 つ置く。
+          {/* 入力可能日（canInput＝today 以降）かつ行データが無い日（lines.length === 0）に ＋マークを 1 つ置く。
               タップで空行を複数展開し（onExpandEmptyDay）、各 ★ をタップして入力する。
-              自動 4 空行が入る today〜today+6 はこの分岐を通らない（lines が既に埋まっている）。 */}
+              today〜today+6 は起動時の自動 4 空行投入で lines が埋まるため、実質 today+7 以降の空日だけがここに入る。 */}
           {lines.length === 0 && canInput && <AddDayButton onTap={onExpandEmptyDay} />}
           {lines.map((line, idx) => {
             if (line.text === "") {
@@ -303,11 +303,11 @@ type AddDayButtonProps = {
 };
 
 /**
- * 空日（today+7 以降の行データ無し日）の入力起点となる ＋マーク。
+ * 入力可能日（canInput＝today 以降）かつ行データが無い日（lines.length === 0）の入力起点となる ＋マーク。
+ * today〜today+6 は起動時に自動 4 空行が入るため、実質的には today+7 以降の空日でだけ表示される。
  * タップで空行を複数展開する（onTap → 親が bulkAddEmptyLines を呼ぶ）。
  * 展開後は各行が ★ プレースホルダ（EmptyLineItem）として描画され、タップでフロート編集に入る。
- * 応援ウィンドウ（today〜today+6）の自動 4 空行と異なり、未来全域に ★ を散らさず
- * 「書きたい日だけ ＋ から開く」ことでプレッシャーを抑える（SPEC「空日の入力可否」）。
+ * 未来全域に ★ を散らさず「書きたい日だけ ＋ から開く」ことでプレッシャーを抑える（SPEC「空日の入力可否」）。
  */
 function AddDayButton({ onTap }: AddDayButtonProps) {
   return (
