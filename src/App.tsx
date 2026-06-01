@@ -21,8 +21,8 @@ const ACTIVE_DEBOUNCE_MS = 150;
 /** スワップ完了後のフラッシュ演出持続時間（ms）。SPEC「150ms 程度」 */
 const SWAP_FLASH_MS = 150;
 
-/** 空日（today+7 以降）の ＋マークタップで一度に展開する空行数（SPEC「空日の入力可否」） */
-const EMPTY_DAY_EXPAND_LINE_COUNT = 5;
+/** 空日（today+7 以降）の ＋マークタップで一度に展開する空行数（応援ウィンドウの自動投入と同数の 4。SPEC「空日の入力可否」） */
+const EMPTY_DAY_EXPAND_LINE_COUNT = 4;
 
 export default function App() {
   const api = useAppData();

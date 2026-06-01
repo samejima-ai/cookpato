@@ -479,17 +479,17 @@ SPEC 改訂 + L1 実装を 1 サイクルで実施。
 
 ---
 
-### 2026-05-31（追補）: 未来空日の入力導線を ＋マーク → ★5行展開に変更（L0+L1 1 サイクル）
+### 2026-05-31（追補）: 未来空日の入力導線を ＋マーク → ★4行展開に変更（L0+L1 1 サイクル）
 
 前サイクル（#41）で「未来空日に入力起点★を 1 本」をマージ後、ユーザー要望
-「★1行よりも ＋マークを配置してタップで★を5行表示する方がいい」を受け、
-未来空日（today+7 以降）の入力導線を「＋マーク → タップで空行5行展開」に変更。
-複数品をまとめて書く際に5行並ぶ方が見通しが良いため。
+「★1行よりも ＋マークを配置してタップで★を5行表示する方がいい」、続けて「星は5→4にして」を受け、
+未来空日（today+7 以降）の入力導線を「＋マーク → タップで空行4行展開」（応援ウィンドウの自動投入と同数）に変更。
+複数品をまとめて書く際に複数行並ぶ方が見通しが良いため。
 
 #### 変更点（useAppData は変更なし・既存 bulkAddEmptyLines 流用）
 - `src/components/DayRow.tsx`: 空日（lines=[] && canInput）の ★1本（EmptyLineItem）を ＋マーク（AddDayButton）に置換。新 prop `onExpandEmptyDay`、`AddDayButton` 新設
 - `src/components/Calendar.tsx`: `onRequestExpandDay` を Props 追加、DayRow へ中継
-- `src/App.tsx`: `EMPTY_DAY_EXPAND_LINE_COUNT = 5`、`handleRequestExpandDay`（`bulkAddEmptyLines([date], 5)`）追加、Calendar へ配線
+- `src/App.tsx`: `EMPTY_DAY_EXPAND_LINE_COUNT = 4`、`handleRequestExpandDay`（`bulkAddEmptyLines([date], 4)`）追加、Calendar へ配線
 - `tests/DayRow.test.tsx`: 空日起点テストを ＋マーク仕様に更新（4 テスト）
 - ドキュメント: SPEC F013 / DONT 却下表 / INTENT F013
 
@@ -507,10 +507,10 @@ SPEC 改訂 + L1 実装を 1 サイクルで実施。
 | `npm run build` | ✅ |
 
 #### 哲学整合（早い・簡単・便利）
-- **早い** ○ — 1品なら★1本と同等、複数品ならむしろ手数減（5行一括展開）
+- **早い** ○ — 1品なら★1本と同等、複数品ならむしろ手数減（4行一括展開）
 - **簡単** ○ — 応援ウィンドウ（today〜today+6）と同じ「★が並ぶ」状態に展開、見通し良い
 - **便利** ○ — 複数品をまとめて書ける
 
 #### 既知未検証事項（実機 iPhone 11 / iOS Safari）
-- ＋マーク → ★5行展開 → ★タップ → フロート編集 の一連の滑らかさ
+- ＋マーク → ★4行展開 → ★タップ → フロート編集 の一連の滑らかさ
 - ＋マークの見た目の分かりやすさ（空日専用で出る文脈）
