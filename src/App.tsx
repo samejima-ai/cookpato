@@ -21,6 +21,9 @@ const ACTIVE_DEBOUNCE_MS = 150;
 /** スワップ完了後のフラッシュ演出持続時間（ms）。SPEC「150ms 程度」 */
 const SWAP_FLASH_MS = 150;
 
+/** 空日（today+7 以降）の ＋マークタップで一度に展開する空行数（応援ウィンドウの自動投入と同数の 4。SPEC「空日の入力可否」） */
+const EMPTY_DAY_EXPAND_LINE_COUNT = 4;
+
 export default function App() {
   const api = useAppData();
   const backup = useBackup(api);
@@ -157,6 +160,16 @@ export default function App() {
     [api],
   );
 
+  // 空日（today+7 以降）の ＋マークタップ：空行を複数展開する。
+  // 応援ウィンドウ（today〜today+6）の自動投入と同じ bulkAddEmptyLines を流用（空日にのみ作用）。
+  // 展開後は各空行が ★ として描画され、妻が書きたい行をタップしてフロート編集に入る。
+  const handleRequestExpandDay = useCallback(
+    (dateKey: DateKey) => {
+      api.bulkAddEmptyLines([dateKey], EMPTY_DAY_EXPAND_LINE_COUNT);
+    },
+    [api],
+  );
+
   // F012 日付ラベル長押し：移動モード進入／同じ日なら解除
   const handleLongPressDate = useCallback((dateKey: DateKey) => {
     setSwapSource((prev) => (prev === dateKey ? null : dateKey));
@@ -240,6 +253,7 @@ export default function App() {
           onRequestEditLine={handleRequestEditLine}
           onRequestEditMemo={handleRequestEditMemo}
           onRequestInsertLine={handleRequestInsertLine}
+          onRequestExpandDay={handleRequestExpandDay}
           onLongPressDate={handleLongPressDate}
           onTapDate={handleTapDate}
           onLineWobbleEnter={handleLineWobbleEnter}

@@ -55,6 +55,7 @@ function baseProps() {
     onToggleCart: () => {},
     onDeleteLine: () => {},
     onInsertLineAt: (_i: number, _w: "above" | "below") => {},
+    onExpandEmptyDay: () => {},
     onRequestEditLine: () => {},
     onRequestEditMemo: () => {},
     onLineWobbleEnter: () => {},
@@ -251,23 +252,28 @@ describe("DayRow", () => {
       expect(countStars(container)).toBe(2);
     });
 
-    it("canInput=true かつ行データなし（day=undefined）なら入力起点★が 1 本描画される", () => {
-      // today+7 以降の未来空日：自動 4 空行は入らないが、入力起点★を 1 本出す
+    it("canInput=true かつ行データなし（day=undefined）なら ＋マーク（献立を書く）が描画される", () => {
+      // today+7 以降の未来空日：自動 4 空行は入らない。★ ではなく ＋マークを 1 つ出す
+      render(<DayRow {...baseProps()} canInput />);
+      expect(screen.getByRole("button", { name: /献立を書く/ })).toBeTruthy();
+    });
+
+    it("行データなしでは ★（未入力の行）は描画されない（＋マークのみ）", () => {
       const { container } = render(<DayRow {...baseProps()} canInput />);
-      expect(countStars(container)).toBe(1);
-    });
-
-    it("入力起点★のタップで onInsertLineAt(0, 'below') が呼ばれる（行生成→編集起動）", () => {
-      const onInsertLineAt = vi.fn();
-      render(<DayRow {...baseProps()} canInput onInsertLineAt={onInsertLineAt} />);
-      const star = screen.getByRole("button", { name: /未入力の行/ });
-      fireEvent.click(star);
-      expect(onInsertLineAt).toHaveBeenCalledWith(0, "below");
-    });
-
-    it("canInput=false（過去日）かつ行データなしなら入力起点★も出ない", () => {
-      const { container } = render(<DayRow {...baseProps()} canInput={false} />);
       expect(countStars(container)).toBe(0);
+      expect(screen.queryByRole("button", { name: /未入力の行/ })).toBeNull();
+    });
+
+    it("＋マークのタップで onExpandEmptyDay が呼ばれる（★複数行を展開）", () => {
+      const onExpandEmptyDay = vi.fn();
+      render(<DayRow {...baseProps()} canInput onExpandEmptyDay={onExpandEmptyDay} />);
+      fireEvent.click(screen.getByRole("button", { name: /献立を書く/ }));
+      expect(onExpandEmptyDay).toHaveBeenCalled();
+    });
+
+    it("canInput=false（過去日）かつ行データなしなら ＋マークも出ない", () => {
+      render(<DayRow {...baseProps()} canInput={false} />);
+      expect(screen.queryByRole("button", { name: /献立を書く/ })).toBeNull();
     });
   });
 
